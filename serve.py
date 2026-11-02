@@ -285,6 +285,7 @@ def _refresh_once(label: str) -> None:
     if os.environ.get("AUTO_PUBLISH", "1") != "0":
         try:
             r = subprocess.run([sys.executable, "publish_static.py"],
+                               cwd=os.path.dirname(os.path.abspath(__file__)),
                                capture_output=True, text=True, timeout=900)
             tail = (r.stdout or "").strip().splitlines()[-2:]
             print("[daemon] publish exit=%s %s" % (r.returncode, " | ".join(tail)),
