@@ -165,10 +165,13 @@ def run(allow_partial: bool = False) -> dict:
     _today = time.strftime("%Y-%m-%d", _now)
     _hm = time.strftime("%H:%M", _now)
     _intraday = (_now.tm_wday < 5 and "09:15" <= _hm <= "15:05")
+    # 09:15 前跑的早间档（如 09:00）拿到的是**昨日收盘价**，绝不能标成今天口径，
+    # 否则页面写"行情 2026-11-02"却全是昨天的数。此时退回人气榜源自己的日期。
+    _quote_day = _today if (sp and _hm >= "09:15") else ""
 
     bundle = {
-        "quote_date": _today if sp else (rq or {}).get("quote_date"),
-        "updated_at": (time.strftime("%Y-%m-%d %H:%M:%S") if sp
+        "quote_date": _quote_day or (rq or {}).get("quote_date"),
+        "updated_at": (time.strftime("%Y-%m-%d %H:%M:%S") if _quote_day
                        else (rq or {}).get("updated_at")),
         "intraday": bool(_intraday if sp else (rq or {}).get("intraday")),
         "renqi_date": (rq or {}).get("quote_date"),

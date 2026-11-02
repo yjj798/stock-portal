@@ -250,15 +250,20 @@ def main():
 
 
 # ---------------------------------------------------------------- 云端自动刷新
-# 托管沙箱里没有 cron，用进程内线程顶替计划任务：每个交易日**午盘（11:35）**、
-# 收盘后（15:10）与晚间源更新后（21:40）各跑一轮 snapshot_job + refresh --allow-partial。
-# 午盘这一档是给"中午收盘想看一眼最新数据"用的：11:30 收盘后 5 分钟抓，涨跌/成交/
-# 涨停池/驱动词都是上午的真实口径，不用等到收盘。
+# 托管沙箱里没有 cron，用进程内线程顶替计划任务。四个档位（用户 2026-11-02 定）：
+#   09:00 早间 —— 开盘前看昨日复盘：行情/人气榜刷新，但源口径还是上一交易日，
+#                  snapshot_job 会判"历史日已有快照"直接跳过，不动归档
+#   12:00 午盘 —— 11:30 收盘后半小时，上午的真实口径（涨跌/成交/涨停池/驱动词）
+#   15:10 收盘 —— 收盘数据落库
+#   16:00 复盘 —— 简报/归因/龙虎榜那一批生成完，复盘总结可以出
+# 每轮刷完自动同步 GitHub Pages 镜像（AUTO_PUBLISH=0 可关）。
 # 失败只打日志，不影响服务；下一轮再试。数据写 data/，页面请求期只读，不互斥。
 import threading  # noqa: E402
 import subprocess  # noqa: E402
 import time as _time  # noqa: E402
 from datetime import datetime  # noqa: E402
+
+SLOTS = (("morning", 9, 0), ("midday", 12, 0), ("close", 15, 10), ("review", 16, 0))
 
 _DAEMON_DONE: set = set()
 
@@ -281,11 +286,14 @@ def _refresh_once(label: str) -> None:
             print("[daemon] %s 异常：%s" % (name, e), flush=True)
     # GitHub Pages 是静态托管，没有后端也没有 cron：不主动推，它就永远停在
     # 上一次构建那一刻（本地已刷新、线上还是旧数）。每轮刷完顺手把镜像推上去。
-    # AUTO_PUBLISH=0 可关掉（比如只想本地看、不想动远端）。
-    if os.environ.get("AUTO_PUBLISH", "1") != "0":
+    # AUTO_PUBLISH=0 可关掉（比如只想本地看、不想动远端）；云端沙箱发布时排除了
+    # .git、也没有凭据，用 .git 存在与否当开关，省掉每天四次注定失败的 git 调用。
+    _root = os.path.dirname(os.path.abspath(__file__))
+    if (os.environ.get("AUTO_PUBLISH", "1") != "0"
+            and os.path.isdir(os.path.join(_root, ".git"))):
         try:
             r = subprocess.run([sys.executable, "publish_static.py"],
-                               cwd=os.path.dirname(os.path.abspath(__file__)),
+                               cwd=_root,
                                capture_output=True, text=True, timeout=900)
             tail = (r.stdout or "").strip().splitlines()[-2:]
             print("[daemon] publish exit=%s %s" % (r.returncode, " | ".join(tail)),
@@ -294,23 +302,35 @@ def _refresh_once(label: str) -> None:
             print("[daemon] publish 异常：%s" % e, flush=True)
 
 
+def _due_slot(now, done):
+    """当前时刻该跑哪一档。返回 (slot, key) 或 (None, None)。
+
+    判据是"同一小时、分钟已到、今天这一档没跑过"——进程启动晚了几分钟也能补上，
+    不会像 == 精确比对那样错过整点。
+    """
+    for slot, hh, mm in SLOTS:
+        key = "%s-%s" % (now.strftime("%Y%m%d"), slot)
+        if key not in done and now.hour == hh and now.minute >= mm:
+            return slot, key
+    return None, None
+
+
 def _daemon_loop():
     while True:
         now = datetime.now()
         if _is_trading_day():
-            for slot, hh, mm in (("midday", 11, 35), ("close", 15, 10), ("night", 21, 40)):
-                key = "%s-%s" % (now.strftime("%Y%m%d"), slot)
-                if key not in _DAEMON_DONE and now.hour == hh and now.minute >= mm:
-                    _DAEMON_DONE.add(key)
-                    threading.Thread(target=_refresh_once, args=(slot,),
-                                     daemon=True).start()
+            slot, key = _due_slot(now, _DAEMON_DONE)
+            if slot:
+                _DAEMON_DONE.add(key)
+                threading.Thread(target=_refresh_once, args=(slot,),
+                                 daemon=True).start()
         _time.sleep(30)
 
 
 def start_refresh_daemon():
     threading.Thread(target=_daemon_loop, daemon=True).start()
-    print("[daemon] 自动刷新已启动：交易日 11:35 / 15:10 / 21:40 各一轮"
-          "（刷完自动同步 GitHub Pages 镜像）", flush=True)
+    print("[daemon] 自动刷新已启动：交易日 %s 各一轮（刷完自动同步 GitHub Pages 镜像）"
+          % " / ".join("%02d:%02d" % (h, m) for _, h, m in SLOTS), flush=True)
     # 启动时若数据陈旧（最新快照不是今天且现在已过 15:00），先补一轮
     ds = store.snapshot_dates()
     today = datetime.now().strftime("%Y-%m-%d")

@@ -33,6 +33,19 @@ _TIMEOUT = 20
 _BJ = timezone(timedelta(hours=8))
 
 
+def _is_archived(day: str) -> bool:
+    """源口径是"已归档的历史交易日"吗——是则本次不写盘，避免把旧日覆盖成空。
+
+    为什么需要：09:00 早间档开盘前抓，源的 trade_date 还是上一交易日；若照写，
+    上一交易日的快照会被"非盘中"版本覆盖（涨停池、梯队常为空），越跑越差。
+    """
+    if not day:
+        return False
+    if day == datetime.now(_BJ).strftime("%Y-%m-%d"):
+        return False
+    return day in store.snapshot_dates()
+
+
 def _get(action: str) -> dict | None:
     for i in range(3):
         try:
@@ -189,6 +202,15 @@ def run(target: str | None = None) -> dict | None:
         src["snapshot_id"] = (ov or {}).get("snapshot_id")
     if qx is not None:
         src["qxzb"] = qx.get("checked_at")
+
+    # 开盘前（09:00 档）与休市时段重抓，源的 trade_date 还是上一个交易日：此时写盘
+    # 会把**已归档的历史日**用"非盘中快照"覆盖（涨停池/梯队可能为空），越跑越差。
+    # 判据：源口径 != 今天，且该日已有快照 ⇒ 只读不写。
+    _day = (qdate or "")[:10]
+    if _is_archived(_day):
+        print("[snapshot] 源口径 %s 为历史交易日且已有快照，跳过写入（保住已归档数据）"
+              % _day)
+        return store.load_snapshot(_day)[1]
 
     snap = {"trade_date": qdate,
             "as_of": src.get("overview") or src.get("qxzb") or "",
