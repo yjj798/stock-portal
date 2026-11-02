@@ -78,9 +78,12 @@ else:
 
 print("== D 页面层 ==")
 html_i = page_industry.render(data, meta, sc=sc)
-for kw in ("行业热度榜", "双轮驱动", "只有行业", "只有概念", "口径说明", "申万行业"):
+for kw in ("行业热度榜", "双轮驱动", "行业单边", "概念单边", "口径说明", "申万行业"):
     chk("行业页含「%s」" % kw, kw in html_i, True)
 chk("行业页带行业分位条", "涨幅分位" in html_i, True)
+# 2026-11-02 用户反馈：单边标签被读成「这只票没有另一项」，所以要写清差在哪
+chk("单边行标出与门槛的差距", "＜ 门槛" in html_i or "＜ 12.5" in html_i, True)
+chk("口径说明点明单边≠没有另一项", "单边不是" in html_i, True)
 html_r = page_rank.render(data, meta)
 chk("榜单页带行业列", "行业 /14" in html_r, True)
 chk("榜单页带驱动列", "驱动" in html_r, True)

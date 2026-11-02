@@ -281,11 +281,18 @@ def build(data, base_by_code: dict) -> dict:
                         ("%.2f 亿" % (blk["net"] / 1e8)) if blk.get("net") is not None else "—")),
         }
 
+    # 「行业热」门槛今天落在哪个涨幅上：85 分位对应的指数涨幅。
+    # 页面上要拿它跟个股所属行业的涨幅对比，用户才知道差多远——
+    # 只说「行业不热」等于没说，给出门槛的绝对读数（今天 = +5.1%）才有判据。
+    gate = pcts[min(int(len(pcts) * HOT_PCT), len(pcts) - 1)] if pcts else None
+
     return {
         "by_code": out,
         "rows": rows,
         "meta": {
             "n_blocks": len(blocks), "n_rows": len(rows),
+            "hot_gate_pct": round(gate, 2) if gate is not None else None,
+            "median_pct": round(pcts[len(pcts) // 2], 2) if pcts else None,
             "n_hot": sum(1 for r in rows if r["hot"]),
             "n_double": sum(1 for v in out.values() if v["drive"] == "双轮"),
             "n_ind_only": sum(1 for v in out.values() if v["drive"] == "行业"),

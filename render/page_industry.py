@@ -21,6 +21,7 @@
 from __future__ import annotations
 
 import score as scoring
+from sector import CON_HOT, HOT_BREADTH, HOT_PCT
 from .components import card, empty, esc, grid4, num, signed, table, td, trim, yi
 from .shell import footer, page
 
@@ -75,13 +76,38 @@ def _industry_table(rows, stocks) -> str:
                 "+ 涨停 20 + 成员均涨 10</span>" % len(rows), body)
 
 
-def _drive_table(rows, stocks, title: str, sub: str, empty_text: str) -> str:
+def _why(r, gate) -> str:
+    """驱动列的第二行：把「差在哪」直接写出来。
+
+    只写「概念」两个字会让人以为"这只票没有行业"——用户 2026-11-02 就是这么
+    读错的（沈阳机床被当成"没有行业"，实际是行业只排到中位）。所以单边一定
+    标明另一项差多少：行业＋2.01% ＜ 门槛＋3.58%，或 概念 8.3 ＜ 12.5。
+    """
+    i = r.get("industry") or {}
+    d = r.get("drive")
+    pr = (i.get("pct_rank") or 0.0) * 100
+    br = i.get("breadth")
+    if d == "行业":
+        return "概念 %s ＜ %.1f" % (trim(r["concept"], 1), CON_HOT)
+    if d == "概念":
+        if pr < HOT_PCT * 100:
+            if gate is not None and i.get("pct") is not None:
+                return "行业 %s ＜ 门槛 %s" % (signed(i["pct"], 2) + "%",
+                                              signed(gate, 2) + "%")
+            return "行业分位 %.0f%% ＜ %.0f%%" % (pr, HOT_PCT * 100)
+        if br is not None and br < HOT_BREADTH:
+            return "广度 %.0f%% ＜ %.0f%%" % (br * 100, HOT_BREADTH * 100)
+        return "行业未达热门槛"
+    return ""
+
+
+def _drive_table(rows, stocks, title: str, sub: str, empty_text: str, gate=None) -> str:
     if not rows:
         return card(title, empty(empty_text), sub)
     body_rows = []
     for r in rows:
         i = r.get("industry") or {}
-        e = stocks.get(r["code"]) or {}
+        why = _why(r, gate)
         body_rows.append("<tr>%s%s%s%s%s%s%s</tr>" % (
             td('<a class="sl" href="/s/%s">%s</a>' % (esc(r["code"]), esc(r.get("name") or r["code"])),
                left=True),
@@ -91,7 +117,9 @@ def _drive_table(rows, stocks, title: str, sub: str, empty_text: str) -> str:
                left=True),
             td("<b>%s</b><span class=\"sub\">/25</span>" % trim(r["concept"], 1)),
             td('<b class="big">%s</b>' % trim(r["total"], 1)),
-            td('<span class="%s">%s</span>' % (DRIVE_CLS.get(r["drive"], ""), esc(r["drive"]))),
+            td('<span class="%s">%s</span>%s'
+               % (DRIVE_CLS.get(r["drive"], ""), esc(r["drive"]),
+                  '<div class="sub">%s</div>' % esc(why) if why else "")),
         ))
     return card(title, table(["股票", "行业", "行业涨幅", "行业中位置", "概念 /25",
                               "总分 /120", "驱动"],
@@ -100,11 +128,16 @@ def _drive_table(rows, stocks, title: str, sub: str, empty_text: str) -> str:
 
 def _note(data) -> str:
     m = (data.get("industry") or {}).get("meta") or {}
+    n_code = m.get("n_code") or 0
+    n_ok = m.get("n_matched") or 0
+    miss = max(0, n_code - n_ok)
+    cover = ("%d 只票全部对上行业指数" % n_ok if miss == 0
+             else "%d 只票里 %d 只能对上行业指数，其余 %d 只当日无行情（停牌/新股），"
+                  "页面标「无行业数据」而不是判成行业弱" % (n_code, n_ok, miss))
     return card("口径说明", (
         '<div class="dv-detail">'
         "<b>行业分类</b>取申万行业（东财行业板块，含二级与三级共 %d 个），个股归属来自行情接口的"
-        "所属行业字段，不是按名字或概念猜的——实测池内 %d 只票里 %d 只能对上行业指数，"
-        "剩下几只是当日无行情（停牌/新股），页面上标「无行业数据」而不是判成行业弱。<br>"
+        "所属行业字段，不是按名字或概念猜的——实测池内 %s。<br>"
         "<b>行业分（0~14）</b>＝涨幅分位 7 + 上涨广度分位 4 + 主力净额分位 3。"
         "三项都用<b>全市场行业排名</b>而不是绝对涨幅：普涨日 +3%% 只是中位数，"
         "全场下跌时 +0.5%% 就已经最强，绝对数会随大盘漂。<br>"
@@ -112,11 +145,14 @@ def _note(data) -> str:
         "<b>概念热</b>判据＝概念分 ≥ 12.5/25（过半）。<br>"
         "<b>双轮共振 +6</b>＝行业热与概念热<b>同时</b>成立。只热一边不给分——"
         "给了就等于给所有概念热票普涨一次分，榜单会整体通胀，反而看不出双轮的稀缺。<br>"
+        "<b>单边不是「没有另一项」</b>：标「概念」只表示行业没到热门槛（页面上把该行业的涨幅与"
+        "今天的门槛并排写出来），行业归属与行业分照样计入总分；标「行业」同理，"
+        "代表没有故事热起来，不是这只票没有概念标签。<br>"
         "<b>上涨广度</b>已做小样本收缩（1 涨 0 跌不算 100%%），并按全市场分位展示；"
         "括号里的原始值就是板块的涨跌家数比。<br>"
         "<b>较昨日</b>要等历史积累：每天收盘留一份行业涨幅快照，第二天起才会显示差值，"
         "没有昨天的数据就显示「—」，不编造「加速」。"
-        % (m.get("n_blocks") or 0, m.get("n_code") or 0, m.get("n_matched") or 0)
+        % (m.get("n_blocks") or 0, cover)
     ), "数据来源：东财行业板块行情 · 个股所属行业")
 
 
@@ -163,18 +199,27 @@ def render(data, meta, sc=None) -> str:
                 "<b>部分数据源异常</b>：%s。相关榜单会缺行，不是页面坏了。</div></div>"
                 % esc("；".join(data["degraded"])))
 
+    gate = sm.get("hot_gate_pct")
+    gate_txt = ("今天行业热门槛＝指数 %s%%（全市场 %d 个板块的 85%% 分位，中位 %s%%）"
+                % (signed(gate, 2), sm.get("n_blocks") or 0,
+                   signed(sm.get("median_pct"), 2) if sm.get("median_pct") is not None else "—")
+                if gate is not None else "行业热门槛按涨幅分位计")
     return page("行业 · A 股全景", "/industry", "".join([
         head,
         degr,
         '<div class="card">%s</div>' % kpi,
         _industry_table(rows, stocks) if rows else card("行业热度榜", empty("今天没有行业数据")),
         _drive_table(double, stocks, "双轮驱动<span>行业在加速，概念也在热</span>",
-                     "两类逻辑同时成立", "今天没有双轮驱动的票——行业与概念没有同时热的那一只。"),
+                     "两类逻辑同时成立", "今天没有双轮驱动的票——行业与概念没有同时热的那一只。",
+                     gate),
         '<div class="cols">%s%s</div>' % (
-            _drive_table(ind_only[:10], stocks, "只有行业<span>概念不热</span>",
-                         "行业单边", "没有行业单边的票。"),
-            _drive_table(con_only[:10], stocks, "只有概念<span>行业不热</span>",
-                         "概念单边", "没有概念单边的票。")),
+            _drive_table(ind_only[:10], stocks, "行业单边<span>概念没热</span>",
+                         "行业在动，但没有故事把票串起来 · " + gate_txt,
+                         "没有行业单边的票。", gate),
+            _drive_table(con_only[:10], stocks, "概念单边<span>行业没热</span>",
+                         "有故事，但所属行业只是跟随大盘、没到自己热 · " + gate_txt
+                         + " · 行业列照旧给出归属与分位，不是「没有行业」",
+                         "没有概念单边的票。", gate)),
         _note(data),
     ]), subtitle="本地 · 数据真值",
         tail=footer("数据来源：东财行业板块行情（m:90+t:2）· 个股所属行业（f100）· "
