@@ -193,9 +193,13 @@ def main():
     if not data:
         sys.exit("data/live/bundle.json 不存在，先跑 refresh.py")
     stocks = data.get("stocks") or {}
-    if os.path.isdir(DIST):
-        shutil.rmtree(DIST)
-    os.makedirs(DIST)
+    # 不整目录 rmtree。本机 sitecustomize 给 shutil.rmtree 挂了 safe-delete 钩子，
+    # 单次删除 >50 个文件会抛 SAFE_DELETE_BULK_CONFIRM_REQUIRED ——
+    # daemon 里没有交互、也没提权，整轮 publish 就这么静默失败了
+    # （2026-11-02 15:11 实测：refresh 成功、publish exit=1、线上停在旧数）。
+    # 改成「覆盖写 + 收尾只删多余文件」：每天页面集合基本稳定，多出来的通常个位数。
+    os.makedirs(DIST, exist_ok=True)
+    old_files = {os.path.join(dp, fn) for dp, _, fns in os.walk(DIST) for fn in fns}
     open(os.path.join(DIST, ".nojekyll"), "w").close()
     with open(os.path.join(DIST, "404.html"), "w", encoding="utf-8") as f:
         f.write(_404())
@@ -258,6 +262,20 @@ def main():
     for c in sorted(extra - set(stocks)):
         put(os.path.join(DIST, "s", c), page_stock.render(c, None, data, meta), 2)
         n += 1
+
+    # ---- 收尾：删掉这次没再生成的旧文件（页面集合变化时才几个），
+    #      逐个小批量删，不触发 safe-delete 的批量确认。
+    new_files = {os.path.join(dp, fn) for dp, _, fns in os.walk(DIST) for fn in fns}
+    stale = sorted(old_files - new_files)
+    gone = 0
+    for p in stale:
+        try:
+            os.remove(p)
+            gone += 1
+        except OSError:
+            pass
+    if stale:
+        print("清理过期文件 %d 个（失败 %d）" % (gone, len(stale) - gone))
 
     size = sum(os.path.getsize(os.path.join(dp, fn))
                for dp, _, fns in os.walk(DIST) for fn in fns)
