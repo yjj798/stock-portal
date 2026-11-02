@@ -24,7 +24,7 @@ import urllib.parse
 import urllib.request
 
 import store
-from fetchers import base, renqi, tdx_rank
+from fetchers import base, renqi, spot, tdx_rank
 
 PORT = 888
 OK, BAD = 0, 0
@@ -105,13 +105,24 @@ def main():
     print("\n== C 个股字段（bundle vs 源） ==")
     rq_map = renqi.stock_map(fresh_rq)
     tdx_map = tdx_rank.stock_map({"top": fresh_tdx, "history": {}})
+    # 价格/涨幅的真值＝实时行情（data/live/spot.json）；人气榜是收盘后源，
+    # 盘中的 price/pct 还停在上一个交易日，拿它当基准等于用旧数据验收新页面。
+    try:
+        sp_map = spot.load()[0] or {}      # base.load 返回 (data, meta)
+    except Exception:  # noqa: BLE001
+        sp_map = {}
     for c in ("002172", "002086", "600721"):
         e = (data.get("stocks") or {}).get(c) or {}
         s = rq_map.get(c) or {}
         t = tdx_map.get(c) or {}
+        sp = sp_map.get(c) or {}
         chk("%s 名称" % c, e.get("name"), s.get("name") or t.get("name"))
-        chk("%s 价格" % c, e.get("price"), s.get("price") if s.get("price") is not None else t.get("price"))
-        chk("%s 涨幅" % c, e.get("pct"), s.get("chg") if s.get("chg") is not None else t.get("change_pct"))
+        chk("%s 价格" % c, e.get("price"),
+            sp.get("price") if sp.get("price") is not None
+            else (s.get("price") if s.get("price") is not None else t.get("price")))
+        chk("%s 涨幅" % c, e.get("pct"),
+            sp.get("pct") if sp.get("pct") is not None
+            else (s.get("chg") if s.get("chg") is not None else t.get("change_pct")))
         chk("%s 连板标签" % c, e.get("board_tag"), s.get("board_tag"))
         chk("%s score_final" % c, e.get("score"), s.get("score_final"))
         chk("%s ths_heat" % c, e.get("ths_heat"), s.get("ths_heat"))
@@ -150,7 +161,11 @@ def main():
     chk("002172 含上榜原因卡片", "上榜原因" in h, True)
     chk("002172 含行业原因", "行业原因" in h, True)
     chk("002172 含公司原因", "公司原因" in h, True)
-    chk("002172 原文片段落地", "康龙化成" in h, True)
+    # 原文每天在变，不能把某一天的人名钉死在断言里；从当日原文取一段核对是否真渲染出来
+    _frag = next((seg.strip()[:12] for seg in
+                  ((ab.get("002172") or {}).get("reason") or "").split("\n")
+                  if len(seg.strip()) > 12), "")
+    chk("002172 原文片段落地（%s）" % (_frag or "空原文"), bool(_frag) and _frag in h, True)
     chk("旧文案（概念龙头提示句）已移除",
         "概念榜里它的人气名次最靠前" not in h, True)
     # 非当日：有旧记录的票要明确标注，不能冒充当日原因

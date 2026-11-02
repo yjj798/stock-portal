@@ -102,10 +102,15 @@ def main() -> int:
             continue
         print("        %s：n=%d 有涨幅样本=%d 均涨幅=%s"
               % (nm, r["n"], r["n_pct"], r["avgpct"]))
-    chk("CPO 涨幅样本不足时 avgpct 为 None",
-        (cpo or {}).get("avgpct") is None, (cpo or {}).get("n_pct", 99) < S.CON_MIN_PCT)
-    chk("样本不足时涨幅分＝中性半分 7.5",
-        (cpo or {}).get("sub", {}).get("rise"), S.CON_W["rise"] * 0.5)
+    # 样本够不够是当天的数据事实，不是常量：按规则反推期望值再比。
+    if cpo:
+        _few = cpo["n_pct"] < S.CON_MIN_PCT
+        chk("CPO 样本不足时 avgpct 为 None（今日 n_pct=%d）" % cpo["n_pct"],
+            (cpo.get("avgpct") is None) == _few, True)
+        _exp = (round(S.CON_W["rise"] * 0.5, 1) if _few else
+                round(S.CON_W["rise"] * max(0.0, min(1.0, (cpo["avgpct"] + 2) / 10.0)), 1))
+        chk("涨幅分符合规则（%s → %s）" % ("样本不足取中性" if _few else "按均涨幅折算", _exp),
+            cpo.get("sub", {}).get("rise"), _exp)
     # 若把缺失当 0 算，CPO 均涨幅会变成 0.71 左右；验证实际不是
     if cpo:
         pcts = [stocks[c]["pct"] for c in cpo["codes"] if stocks[c].get("pct") is not None]
@@ -146,7 +151,9 @@ def main() -> int:
     red = [x for x in a if x["code"] == "000525"]
     chk("红太阳（四维全池第一）在 A 档", bool(red), True)
     if red:
-        chk("红太阳按推荐序排 A 档第 1", a.index(red[0]) == 0, True)
+        # 第一名归属由当日数据决定；守结构：A 档首位必须是该档推荐分最大者
+        chk("A 档首位＝推荐分最大者", a[0]["rec"], max(x["rec"] for x in a))
+        print("        红太阳推荐序在 A 档第 %d 位" % (a.index(red[0]) + 1))
         expect = round(0.55 * red[0]["sc"] + 0.45 * red[0]["score"], 1)
         chk("推荐序 = 0.55×四维 + 0.45×共振", red[0]["rec"], expect)
         print("        红太阳 四维 %s · 共振 %d · 推荐 %s" %

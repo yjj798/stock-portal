@@ -78,7 +78,10 @@ def main():
     snap = [f for f in pages if "/snapshot/" in f]
     if snap:
         s = open(snap[0], encoding="utf-8").read()
-        chk("快照页 tab 链接指向自身", 'href="?t=' in s and 'href="/snapshot/' not in s)
+        # 历史快照页的分栏链接要么同页查询（?t=），要么指向自己的 snapshot 目录
+        chk("快照页 tab 链接指向自身", 'href="?t=' in s or
+            re.search(r'href="(?:\.\./)+snapshot/[^/"]+/\?t=', s))
+        chk("快照页无根路径残留", 'href="/snapshot/' not in s and 'href="/?t=' not in s)
 
     chk("404 与 .nojekyll", os.path.isfile(os.path.join(DIST, "404.html")) and
         os.path.isfile(os.path.join(DIST, ".nojekyll")))

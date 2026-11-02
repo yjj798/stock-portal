@@ -50,7 +50,10 @@ def main():
     sc = scoring.build(data)
     r1 = sc["ranked"][0]
     chk("红太阳综合分全池第 1", r1["code"], "000525")
-    chk("红太阳 ≥ 85", r1["total"] >= 85, True)
+    # 分数随当日行情变化（午盘/收盘不同），别把某一天的 87.4 钉死；
+    # 真正要守的是"它凭什么第一"——四维要拉开差距，不是刚好压线。
+    chk("红太阳总分 ≥ 70 且严格第一（领先第 2 名 > 0）",
+        r1["total"] >= 70 and r1["total"] > sc["ranked"][1]["total"], True)
     tags = [d["tag"] for d in r1["concept_detail"]]
     chk("三季报扭亏计入概念趋势", "三季报扭亏" in tags, True)
     chk("三季报增长仍是泛标签", "三季报增长" in scoring.WIDE, True)

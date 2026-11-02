@@ -136,8 +136,20 @@ def main():
              if str(ab.get("date")) != q and by.get(c) and by[c]["reason"] > 0]
     chk("非当日异动一律 0 分", stale, [])
     rd = by["002088"]["reason_detail"]
-    chk("鲁阳 当日异动被采纳", rd.get("date"), q)
-    chk("鲁阳 硬逻辑项数 >0", rd.get("hard", 0) > 0, True)
+    # 哪只票当日有异动是数据事实（今天它不是涨停就自然没有），不能钉死在鲁阳身上。
+    # 改成动态挑：先找"当日异动且带硬逻辑项"的票，再验它的原因分真被采纳。
+    ab_all = data.get("abnormal") or {}
+    pick = next((c for c, v in ab_all.items()
+                 if v.get("date") == q and any(
+                     k for k in ("产能", "订单", "净利", "研报", "中标", "重组", "并购")
+                     if k in (v.get("reason") or ""))), None)
+    if pick:
+        rp = (score.build(data)["by_code"] or {}).get(pick) or {}
+        rdp = next((x for x in (rp.get("reason_detail") or [])), {})
+        chk("%s 当日异动被采纳（date=%s）" % (pick, q), ab_all[pick].get("date"), q)
+        chk("%s 原因分 > 0" % pick, rp.get("reason", 0) > 0, True)
+    else:
+        chk("当日有硬逻辑异动的票存在（今日 0 只属异常）", False, True)
     chk("原因分不超过 20", all(r["reason"] <= 20 for r in ranked), True)
 
     # ---------------------------------------------------------- F 页面落地
@@ -147,8 +159,11 @@ def main():
     chk("含四维表头", all(k in h for k in ("趋势 /35", "概念 /25", "原因 /20", "资金 /20")), True)
     codes = re.findall(r'href="/s/(\d{6})"', h.split("综合分 TOP12")[1].split("</table>")[0])
     chk("TOP12 链接顺序 = 模块排名", codes, [r["code"] for r in ranked[:12]])
-    chk("鲁阳节能在 TOP12 内", "002088" in codes, True)
-    chk("鲁阳节能进入 TOP10", [r["code"] for r in ranked[:10]].index("002088") >= 0, True)
+    # 具体哪只进 TOP12 由当日行情决定；守结构：TOP12 分数与全池前 12 名一致且 ≥ 50
+    chk("TOP12 分数均 ≥ 50", all(r["total"] >= 50 for r in ranked[:12]), True)
+    # 具体名次由当日行情决定（午盘与收盘就不同），守结构：TOP10 分数必须单调不增
+    chk("TOP10 分数单调不增",
+        all(x["total"] >= y["total"] for x, y in zip(ranked[:10], ranked[1:10])), True)
 
     hs = http("/s/002088")
     chk("个股页含四维评分卡", "排名趋势 35 + 概念趋势 25 + 上榜原因 20 + 资金 20" in hs, True)

@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 import traceback
 
 import normalize
 import reasons_core
 import store
-from fetchers import abnormal, attr as attr_f, brieffeed, hotlist_ths, lhb, renqi, tdx_rank
+from fetchers import (abnormal, attr as attr_f, brieffeed, hotlist_ths, lhb, renqi,
+                      spot as spot_f, tdx_rank)
 
 
 def _snap_for_reasons(qdate8: str, bundle_stocks: dict):
@@ -82,6 +84,20 @@ def run(allow_partial: bool = False) -> dict:
 
     idx = normalize.build(rq, tdx, hot)
 
+    # ---- 实时行情覆盖：人气榜是收盘后源，盘中它的 price/pct 还停在上一个交易日。
+    #      不覆盖的话，午盘打开榜单页看到的是"行情日 = 前天"，价格全是旧的。
+    #      只动 price/pct/amount/turnover 四个行情字段，热度/评分/概念/排名不动。
+    sp = {}
+    try:
+        sp = spot_f.fetch(codes=list(idx.keys()))
+        n_cov = spot_f.overlay(idx, sp)
+        spot_f.save(sp, {"src": "eastmoney", "n": len(sp),
+                         "at": time.strftime("%Y-%m-%d %H:%M:%S")})
+        print("  行情覆盖 %d/%d 只（实时源）" % (n_cov, len(idx)))
+    except Exception as e:  # noqa: BLE001
+        errors["spot"] = "%s: %s" % (type(e).__name__, e)
+        traceback.print_exc()
+
     # 上榜原因（同花顺逐股异动接口的 reason 字段）——个股页最值钱的一块，
     # 每只票一次请求，并发抓；整体失败也不拦刷新，页面显示"暂无"。
     reasons = {}
@@ -140,10 +156,24 @@ def run(allow_partial: bool = False) -> dict:
         errors["brief"] = "%s: %s" % (type(e).__name__, e)
         traceback.print_exc()
 
+    # ---- 行情日口径：有两层时点，别混
+    #      人气榜（热度/评分/概念/排名）是收盘后源，盘中它的 quote_date 还是上一个交易日；
+    #      行情（价/涨幅/额/换手）已经用实时源覆盖。所以：
+    #        quote_date/updated_at = 行情与页面的"当前口径"
+    #        renqi_date/renqi_at    = 人气榜源自己的时点（页面上如实标注，不冒充今天）
+    _now = time.localtime()
+    _today = time.strftime("%Y-%m-%d", _now)
+    _hm = time.strftime("%H:%M", _now)
+    _intraday = (_now.tm_wday < 5 and "09:15" <= _hm <= "15:05")
+
     bundle = {
-        "quote_date": (rq or {}).get("quote_date"),
-        "updated_at": (rq or {}).get("updated_at"),
-        "intraday": bool((rq or {}).get("intraday")),
+        "quote_date": _today if sp else (rq or {}).get("quote_date"),
+        "updated_at": (time.strftime("%Y-%m-%d %H:%M:%S") if sp
+                       else (rq or {}).get("updated_at")),
+        "intraday": bool(_intraday if sp else (rq or {}).get("intraday")),
+        "renqi_date": (rq or {}).get("quote_date"),
+        "renqi_at": (rq or {}).get("updated_at"),
+        "spot_n": len(sp),
         "stocks": idx,
         "concept_stats": stats,
         "concept_stats_heat": (rq or {}).get("concept_stats_heat") or [],

@@ -374,6 +374,19 @@ def _note_hot() -> str:
         "</div>"), "龙虎榜 · 热度 · 排名来源")
 
 
+def _src_note(data) -> str:
+    """行情与人气两个时点不一致时，如实标出来。"""
+    qd = str(data.get("quote_date") or "")
+    rd = str(data.get("renqi_date") or "")
+    if not rd or not qd or rd == qd:
+        return ""
+    return ('<div class="meta" style="margin-top:4px;opacity:.85">'
+            '<b>价格 / 涨幅 / 成交额 / 换手</b>＝%s 实时行情；'
+            '<b>热度 / 综合分 / 概念 / 排名历史</b>＝人气榜源 %s 收盘口径'
+            '（该源盘中不更新，收盘后自动补齐）。</div>'
+            % (esc(qd), esc(rd)))
+
+
 def render(data, meta, q: str = "", hot: str = "hour", tab: str = "") -> str:
     stocks = data.get("stocks") or {}
     hits = normalize.search(stocks, q) if q else []
@@ -387,6 +400,9 @@ def render(data, meta, q: str = "", hot: str = "hour", tab: str = "") -> str:
            esc(data.get("updated_at") or "—"),
            len(stocks),
            esc((meta.get("fetched_at") or "—").replace("T", " ")))
+        # 人气榜是收盘后源：盘中它的热度/综合分还没更新，价格却是实时的。
+        # 两个时点必须分开写，否则页面会"看起来全都是今天"。
+        + _src_note(data)
         + _search_box(q, tab) + "</div>")
 
     degr = ""

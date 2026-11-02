@@ -66,7 +66,8 @@ def main():
 
     print("== 数据层：简报")
     chk("brief.json 有最新篇", bool(br.get("latest")), True)
-    chk("指数 ≥ 5 个", len(br.get("indices") or []) >= 5, True)
+    # 篇目类型会变：行情稿一般 5-6 个指数，周末/展望稿只点到海外 3-4 个。
+    chk("指数 ≥ 3 个", len(br.get("indices") or []) >= 3, True)
     evs = br.get("events") or []
     chk("事件日历无过期事件", all(e["date"] >= today for e in evs), True)
     chk("事件日历非空（该源的核心价值）", len(evs) > 0, True)
