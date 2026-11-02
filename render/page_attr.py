@@ -217,13 +217,17 @@ def _concept_strip(pool, rd, kw_map, gains, names) -> str:
     generic = {d["keyword"] for d in (rd.get("drivers") or []) if d.get("generic")}
     cnt = Counter()
     for it in pool:
-        for w in set(kw for kw in (kw_map.get(it["code"]) or [])
-                     if kw not in generic):
+        # 逐个按字典序遍历：set 的迭代顺序受 PYTHONHASHSEED 影响，跨进程不稳定，
+        # 会让 Counter 的首次插入顺序漂移 → 同分词的先后每次都变 → 构建产物不可复现，
+        # 发布链路就无法用"树相同则跳过"判断真变更。排序后插入，才可复现。
+        for w in sorted({kw for kw in (kw_map.get(it["code"]) or [])
+                         if kw not in generic}):
             cnt[w] += 1
-    top = cnt.most_common(10)
+    # 同计数按词名排序，避免并列项顺序随数据顺序漂移
+    top = sorted(cnt.items(), key=lambda t: (-t[1], t[0]))[:10]
     chips = "".join('<span class="chip">%d.&nbsp;%s&nbsp;<b>%d</b></span>'
                     % (i, esc(w), n) for i, (w, n) in enumerate(top, 1))
-    rng = sorted(gains.items(), key=lambda t: -t[1])[:5]
+    rng = sorted(gains.items(), key=lambda t: (-t[1], t[0]))[:5]
     rchips = "".join('<span class="chip">%s&nbsp;<b class="red">+%.1f%%</b></span>'
                      % (esc(names.get(c, c)), g) for c, g in rng)
     return (

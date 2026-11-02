@@ -238,7 +238,9 @@ def concept_board(stocks, snap=None, stats=None) -> list:
     pool = build_tags(stocks, trend)
 
     rows = []
-    for name in set(pool) | set(stats):
+    # 排序后遍历：set 的迭代顺序随 PYTHONHASHSEED 变，会让同分概念的名次在每次
+    # 构建间漂移（榜单/概念页不可复现，静态发布也就无法判断"真变更"）。
+    for name in sorted(set(pool) | set(stats)):
         if name in WIDE or NON_CONCEPT.search(name or ""):
             continue
         st = stats.get(name) or {}
@@ -305,7 +307,7 @@ def concept_board(stocks, snap=None, stats=None) -> list:
                     "rise": round(f_rise, 1), "lead": round(f_lead, 1)}
         r["total"] = round(f_lu + f_up + f_heat + f_rise + f_lead, 1)
 
-    rows.sort(key=lambda x: (-x["total"], -x["n"]))
+    rows.sort(key=lambda x: (-x["total"], -x["n"], x.get("concept") or ""))
     for i, r in enumerate(rows, 1):
         r["rank"] = i
     return rows

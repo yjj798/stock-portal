@@ -279,6 +279,18 @@ def _refresh_once(label: str) -> None:
                   flush=True)
         except Exception as e:
             print("[daemon] %s 异常：%s" % (name, e), flush=True)
+    # GitHub Pages 是静态托管，没有后端也没有 cron：不主动推，它就永远停在
+    # 上一次构建那一刻（本地已刷新、线上还是旧数）。每轮刷完顺手把镜像推上去。
+    # AUTO_PUBLISH=0 可关掉（比如只想本地看、不想动远端）。
+    if os.environ.get("AUTO_PUBLISH", "1") != "0":
+        try:
+            r = subprocess.run([sys.executable, "publish_static.py"],
+                               capture_output=True, text=True, timeout=900)
+            tail = (r.stdout or "").strip().splitlines()[-2:]
+            print("[daemon] publish exit=%s %s" % (r.returncode, " | ".join(tail)),
+                  flush=True)
+        except Exception as e:
+            print("[daemon] publish 异常：%s" % e, flush=True)
 
 
 def _daemon_loop():
@@ -296,7 +308,8 @@ def _daemon_loop():
 
 def start_refresh_daemon():
     threading.Thread(target=_daemon_loop, daemon=True).start()
-    print("[daemon] 自动刷新已启动：交易日 11:35 / 15:10 / 21:40 各一轮", flush=True)
+    print("[daemon] 自动刷新已启动：交易日 11:35 / 15:10 / 21:40 各一轮"
+          "（刷完自动同步 GitHub Pages 镜像）", flush=True)
     # 启动时若数据陈旧（最新快照不是今天且现在已过 15:00），先补一轮
     ds = store.snapshot_dates()
     today = datetime.now().strftime("%Y-%m-%d")
