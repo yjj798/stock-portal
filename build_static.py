@@ -209,20 +209,34 @@ def _404() -> str:
 
 
 def _live_redirect(seg: str) -> str:
-    """静态站上的 /login /register /me /forgot：直接跳动态站。
+    """静态站上的 /login /register /me /forgot：不自动跳，给一张说明卡。
 
-    这几个页面必须登录态或写库，静态托管做不到。与其给一句"请去动态站"，
-    不如 0 秒跳过去——用户少点一次。
+    本来想 0 秒跳动态站，但动态站可能还是旧版（没有 /login 时就是 404）。
+    自动跳转 + 目标 404 = 用户只看到一片白，不知道为什么。所以这里改成
+    「说明 + 手动链接」：地址写清楚，打不开也知道是动态站没更新，不是自己点错。
     """
     url = navmod.SITE_LIVE.rstrip("/") + "/" + seg
+    title = {"/login": "登录", "/register": "注册", "/me": "会员中心",
+             "/forgot": "找回密码"}.get("/" + seg, "会员")
     return ('<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">'
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
-            '<meta http-equiv="refresh" content="0;url=%s">'
-            "<title>去会员中心 · A 股全景</title>"
-            '<style>body{font-family:system-ui;padding:48px;text-align:center;'
-            'color:#333;background:#f4f5f7}a{color:#2563eb}</style></head><body>'
-            "<p>会员功能在动态站，正在跳转……</p>"
-            '<p><a href="%s">没跳过去就点这里</a></p></body></html>' % (url, url))
+            "<title>%s · A 股全景</title>"
+            "<style>body{margin:0;background:#f4f5f7;color:#171a1f;"
+            "font:15px/1.7 -apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif}"
+            ".c{max-width:520px;margin:64px auto;background:#fff;border:1px solid #e6e8eb;"
+            "border-radius:14px;padding:28px}"
+            "h1{font-size:19px;margin:0 0 10px}p{font-size:13.5px;color:#4b5563}"
+            "a.btn{display:inline-block;margin-top:8px;background:#2563eb;color:#fff;"
+            "padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px}"
+            ".n{font-size:12px;color:#6b7280;margin-top:16px;line-height:1.8}</style></head><body>"
+            '<div class="c"><h1>%s在动态站</h1>'
+            "<p>这个页面是 GitHub Pages 上的静态镜像，没有后端，无法登录或写库。"
+            "会员功能（注册、登录、找回密码、自选股）都在动态站：</p>"
+            '<a class="btn" href="%s">前往 %s</a>'
+            '<div class="n">如果上面这个地址报 404，说明动态站还没更新到含会员功能的版本，'
+            "稍后再试或先从首页的各栏目浏览数据（栏目页在静态站都可用）。<br>"
+            '返回 <a href="/">首页</a></div></div></body></html>'
+            % (title, title, url, url))
 
 
 def main():

@@ -87,7 +87,7 @@ def main():
         all(('data-k="%s"' % k) in board for k in ("mood", "pool", "struct", "flow")))
     chk("总览栏链接指回 /board", 'href="../board/?t=pool"' in board)
     chk("总览页无残留绝对内链", not re.search(r'href="/(rank|concept|drivers|attr|brief|s|snapshot|board)', board))
-    chk("静态站会员页跳动态站", "t.legaga.top" in page("login/index.html"))
+    chk("静态站会员页给出动态站地址", "t.legaga.top/login" in page("login/index.html"))
 
     rank = page("rank/index.html")
     chk("榜单两栏", 'data-tabs="rank"' in rank and 'data-k="score"' in rank and 'data-k="hot"' in rank)
