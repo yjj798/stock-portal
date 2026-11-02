@@ -16,6 +16,7 @@ P3 会接 F10 全概念页（比当前 concept_all 更全）与逐股异动明�
 """
 from __future__ import annotations
 
+import news as news_mod
 import normalize
 import score as scoring
 import sector
@@ -36,6 +37,41 @@ def _n(v, d=1, unit=""):
     if v is None:
         return "—"
     return trim(v, d) + unit
+
+
+def entry_of(code: str, data) -> dict:
+    """取个股条目：池内有就用它，没有就看是不是今天的涨停股——是就造一条轻量记录。
+
+    2026-11-02：人气池 141 只与全市场涨停 125 只只有 43 只交集，关键词榜/主线成员
+    点进来的大多数是池外票。没有这个兜底，页面就是"没这只票的数据"，
+    等于把刚数出来的消息面又堵回去了。
+    """
+    c = str(code or "").zfill(6)[:6]
+    e = ((data or {}).get("stocks") or {}).get(c)
+    if e:
+        return e
+    for x in ((data or {}).get("zt_pool") or []):
+        if str(x.get("code")) == c:
+            bd = int(x.get("board") or 1)
+            return {"code": c, "name": x.get("name"), "price": x.get("price"),
+                    "pct": x.get("pct"), "amount": x.get("amount"),
+                    "turnover": x.get("turnover"), "industry": x.get("industry"),
+                    "limit_up": True, "fund": x.get("fund"),
+                    "board_tag": ("%d板" % bd) if bd >= 2 else "",
+                    "_partial": True}
+    return None
+
+
+def _limit_card(e) -> str:
+    """池外涨停股的行情卡：只有涨停池能给的那几个字段。"""
+    cells = [
+        ("连板高度", ("%s" % esc(e.get("board_tag") or "首板")), "东财涨停池"),
+        ("封单额", yi(e.get("fund")), "收盘封单"),
+        ("成交额", yi(e.get("amount")), "当日"),
+        ("换手率", ("%s%%" % trim(e.get("turnover"), 2))
+         if e.get("turnover") is not None else "—", "当日"),
+    ]
+    return grid4(cells)
 
 
 def _kpi(e) -> str:
@@ -105,7 +141,20 @@ def _days_between(a: str, b: str):
         return None
 
 
-def _reason_card(ab, quote_date: str = "") -> str:
+def _news_of(data, main_of=None) -> dict:
+    """消息面聚合（关键词共享只数）。attr 读不到就用 bundle 的涨停标记兜底。"""
+    try:
+        import store
+        at, _ = store.load_attr()
+    except Exception:  # noqa: BLE001
+        at = {}
+    try:
+        return news_mod.build(data or {}, attr=at or {}, main_of=main_of)
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _reason_card(ab, quote_date: str = "", nw=None) -> str:
     """上榜原因——同花顺给这只票写的「为什么涨/为什么热」。
 
     数据来自逐股异动接口的 reason 字段（ms.10jqka.com.cn/thsHotDetail 页面上
@@ -145,10 +194,27 @@ def _reason_card(ab, quote_date: str = "") -> str:
         return ('<div class="rs-b"><div class="rs-t">%s</div>'
                 '<div class="rs-x">%s</div></div>' % (esc(t), esc(text)))
 
+    # 关键词带上"全市场有几只票也挂这个词"——同一个词被 9 只涨停股共享，
+    # 才说明这是消息面而不是这只票自己的事。噪声词（此前涨幅较大这类）压暗。
     kw = ""
     if ab.get("keywords"):
-        kw = ('<div class="chips" style="margin-top:10px">%s</div>'
-              % "".join('<span class="chip">%s</span>' % esc(k) for k in ab["keywords"]))
+        cnt = {r["kw"]: r["n"] for r in ((nw or {}).get("keywords") or [])}
+        ztcnt = {r["kw"]: r["n_zt"] for r in ((nw or {}).get("keywords") or [])}
+        items = []
+        for k in ab["keywords"]:
+            # 计数表按归一后的词（「“羊”字辈」→「羊字辈」）存的，这里也要归一后再查，
+            # 否则带引号的那条永远查不到只数（2026-11-02 实测）。
+            kk = news_mod.norm_kw(k)
+            n = cnt.get(kk)
+            noisy = news_mod.is_noise(k)
+            tail = (' <span class="sub">%d 只 · 涨停 %d</span>' % (n, ztcnt.get(kk) or 0)
+                    if n else "")
+            items.append('<a class="chip" href="/theme"%s>%s%s</a>'
+                         % (' style="opacity:.55"' if noisy else "", esc(k), tail))
+        kw = ('<div class="kv" style="margin:12px 0 6px"><div>'
+              "<span>关键词（同花顺给这只票打的词，括号里是全市场共享只数）</span>"
+              '<b><a class="sl" href="/theme">看今日关键词榜</a></b></div></div>'
+              '<div class="tags">%s</div>' % "".join(items))
     tail = ('<div class="sub" style="margin-top:10px">%s</div>' % esc(disc)) if disc else ""
     return ('<div class="card"><h2>上榜原因%s</h2>%s%s%s%s%s</div>'
             % (head, note,
@@ -522,6 +588,7 @@ def render(code: str, e, data, meta) -> str:
 
     name = e.get("name") or code
     pct = e.get("pct")
+    partial = bool(e.get("_partial"))
 
     # 四维评分只算一次：build 会遍历全池建标签池，个股页里调两次就白跑一遍。
     _sc_all = scoring.build(data)
@@ -555,6 +622,27 @@ def render(code: str, e, data, meta) -> str:
            signed(pct, 2) if pct is not None else "—",
            esc(normalize.line(e))))
 
+    if partial:
+        # 池外涨停：没有人气名次/分时/评分，只给行情 + 异动解析 + 涨跌停数据。
+        # 明确写清"为什么没有分数"，不拿空分冒充 0 分。
+        body = "".join([
+            hero,
+            '<div class="card">%s</div>' % _limit_card(e),
+            _reason_card((data.get("abnormal") or {}).get(code),
+                         data.get("quote_date") or "",
+                         _news_of(data, ((_sc_all.get("theme") or {}).get("main_of")))),
+            _boards_card(None, data),
+            _lhb_card((data.get("lhb") or {}).get(code), data.get("quote_date") or ""),
+            card("为什么这页没有评分", '<div class="dv-detail">'
+                 "这只票今天涨停，但不在人气池（同花顺热度榜 141 只）里，"
+                 "所以没有人气名次与热度趋势——四维评分算不出来，这里不填 0 分冒充。"
+                 "它仍然被计入<b>主线热度</b>与<b>消息面关键词榜</b>"
+                 "（全市场涨停口径），点顶部「主线」看它挂在哪条线上。</div>"),
+        ])
+        return page("%s %s · A 股全景" % (name, code), "/attr", body,
+                    tail=footer("数据来源：东财涨停池 · 同花顺逐股异动",
+                                "本页为轻量页：无评分，仅行情与原因。"))
+
     body = "".join([
         hero,
         '<div class="card">%s</div>' % _kpi(e),
@@ -565,7 +653,8 @@ def render(code: str, e, data, meta) -> str:
         _boards_card(sc, data),
         # 上榜原因紧跟在分数后面：用户点进个股页第一个想知道的不是"它多少分"，
         # 而是"它凭什么涨"。这段来自同花顺逐股异动的 reason 字段。
-        _reason_card((data.get("abnormal") or {}).get(code), data.get("quote_date") or ""),
+        _reason_card((data.get("abnormal") or {}).get(code), data.get("quote_date") or "",
+                     _news_of(data, ((_sc_all.get("theme") or {}).get("main_of")))),
         _concepts(e, data, (_sc_all.get("tags") or {})),
         _tdx_card(e),
         _hot_card(e),

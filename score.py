@@ -68,6 +68,7 @@ import collections
 import math
 import re
 
+import news as news_mod
 import pinyin_map
 import sector
 import theme as theme_mod
@@ -492,8 +493,27 @@ def build(data) -> dict:
 
     # 消息面主线归并：行业/概念之上那一层。把 AI短剧/AI漫剧/AI视频/出版传媒 这些
     # 同一条消息的细支并成一条主线，否则集中度全散在细支里，看不出今天到底在炒什么。
+    # 池外涨停股：只有东财涨停池的行情 + 异动解析的关键词，没有热度/分时。
+    # 把它们并进主线，主线热度才是"全市场涨停"口径——实测人气池 141 只里
+    # 只有 43 只涨停，不并的话 AI 视频这条线会被少算 20 多只涨停。
+    zt_extra, zt_stats = {}, {}
+    for x in (data.get("zt_pool") or []):
+        c = str(x.get("code") or "").zfill(6)
+        if not c or c in stocks:
+            continue
+        kws = ((data.get("abnormal") or {}).get(c) or {}).get("keywords") or []
+        zt_extra[c] = {"tags": [str(k) for k in kws if k], "industry": x.get("industry")}
+        zt_stats[c] = {"name": x.get("name"), "pct": x.get("pct"), "limit_up": True,
+                       "board_tag": ("%d板" % x["board"]) if (x.get("board") or 1) >= 2 else "",
+                       "heat_rank": None, "industry": x.get("industry")}
+    _abn = data.get("abnormal") or {}
+    _kwmap = {c: [str(k) for k in ((_abn.get(c) or {}).get("keywords") or [])
+                  if k and not news_mod.is_noise(k)] for c in stocks}
+    for c in zt_extra:
+        _kwmap[c] = list(zt_extra[c]["tags"])
     th = theme_mod.build(stocks, data.get("f10") or {}, tags_of,
-                     (data.get("concept_sector") or {}).get("blocks") or {})
+                         (data.get("concept_sector") or {}).get("blocks") or {},
+                         extra=zt_extra, kwmap=_kwmap)
     ntags = th.get("ntags") or {}
     tags = build_tags(stocks, trend, ntags)
 
@@ -533,7 +553,8 @@ def build(data) -> dict:
         r["drive"] = s.get("drive") or "无"
         r["total"] = round(r["base100"] + r["ind"] + r["reso"], 1)
 
-    trows = score_themes(th.get("rows") or [], stocks, trend)
+    # 计分用的统计字典要把池外涨停合进来，否则它们有成员没行情 → KeyError
+    trows = score_themes(th.get("rows") or [], {**stocks, **zt_stats}, trend)
     theme_mod.link_tags(trows, tags)
     # 把主线名与热度挂回个股，页面不用再查一次表（行业页驱动列、个股页归因卡都要）
     _nm = {r["id"]: r for r in trows}
@@ -558,6 +579,8 @@ def build(data) -> dict:
         "tags": tags,
         "sector": sec,
         "theme": {"rows": trows,
+                  "main_of": {c: (v.get("main") or "")
+                              for c, v in (th.get("by_code") or {}).items()},
                   "meta": {"n": len(trows),
                            "n_hot": sum(1 for r in trows if r.get("hot")),
                            "full": 100.0, "hot_gate": THEME_HOT}},

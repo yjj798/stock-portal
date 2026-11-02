@@ -16,6 +16,7 @@
 """
 from __future__ import annotations
 
+import news
 from .components import card, empty, esc, pct_span, rnd, table, td, trim, yi
 from .shell import footer, page
 
@@ -207,6 +208,26 @@ def _kpi(today, prev, y8, qdate) -> str:
     return '<div class="kpi5">%s</div>' % "".join(out)
 
 
+def kw_map_for(attr, rd, bundle) -> dict:
+    """代码 → 驱动词。来源：reasons_core 快照（较准）→ 异动解析 keywordList（兜底）。
+
+    2026-11-02：reasons_core 只覆盖快照里那批票，125 只涨停里绝大多数不在人气池，
+    这一列原来是空的。现在用并集抓回来的异动解析补上，页面与验收脚本共用本函数，
+    否则"概念 TOP10 第一名"在页面和复算里会是两个数。
+    """
+    rd = rd or {}
+    kw_map = {r["code"]: [k for k in (r.get("keywords") or []) if k]
+              for r in (rd.get("records") or [])}
+    try:
+        nw = news.build(bundle or {}, attr=attr)
+        for c, v in (nw.get("by_code") or {}).items():
+            if not kw_map.get(c) and v.get("theme_kw"):
+                kw_map[c] = v["theme_kw"][:6]
+    except Exception:  # noqa: BLE001
+        pass
+    return kw_map
+
+
 def _concept_strip(pool, rd, kw_map, gains, names) -> str:
     """概念 TOP10（只取**具体**驱动词）+ 区间最强 TOP5。
 
@@ -240,6 +261,12 @@ def _concept_strip(pool, rd, kw_map, gains, names) -> str:
 
 
 def render(attr=None, rd=None, bundle=None) -> str:
+    if bundle is None:
+        try:
+            import store
+            bundle, _ = store.load_bundle()
+        except Exception:  # noqa: BLE001
+            bundle = {}
     if not attr:
         body = card("涨停归因", empty(
             "还没有归因快照（data/live/attr.json）。在工程目录跑一次 python refresh.py。"))
@@ -253,9 +280,7 @@ def render(attr=None, rd=None, bundle=None) -> str:
     zt = today.get("zt") or []
     zb = today.get("zb") or []
 
-    rd = rd or {}
-    kw_map = {r["code"]: [k for k in (r.get("keywords") or []) if k]
-              for r in (rd.get("records") or [])}
+    kw_map = kw_map_for(attr, rd, bundle)
     names = {r["code"]: r.get("name") or "" for r in (rd.get("records") or [])}
     for it in zt:
         names.setdefault(it["code"], it.get("name") or "")

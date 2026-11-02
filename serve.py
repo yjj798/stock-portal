@@ -207,7 +207,8 @@ class H(BaseHTTPRequestHandler):
         if not data:
             return self._send(200, no_bundle())
         c = "".join(ch for ch in str(code) if ch.isdigit())[:6]
-        e = (data.get("stocks") or {}).get(c)
+        # 池外涨停（人气池 141 只与全市场涨停只有 43 只交集）用涨停池兜底成轻量页
+        e = page_stock.entry_of(c, data)
         self._send(200, page_stock.render(c or str(code), e, data, meta))
 
     def _drivers(self):

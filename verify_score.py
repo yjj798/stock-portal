@@ -162,8 +162,10 @@ def main():
     # 哪只票当日有异动是数据事实（今天它不是涨停就自然没有），不能钉死在鲁阳身上。
     # 改成动态挑：先找"当日异动且带硬逻辑项"的票，再验它的原因分真被采纳。
     ab_all = data.get("abnormal") or {}
+    # 只在**人气池内**挑：abnormal 自 2026-11-02 起覆盖 275 只（池 ∪ 涨停 ∪ 龙虎榜 ∪ 热榜），
+    # 挑到池外票就没有评分可验（那不是 bug，是口径不同）。
     pick = next((c for c, v in ab_all.items()
-                 if v.get("date") == q and any(
+                 if c in by and v.get("date") == q and any(
                      k for k in ("产能", "订单", "净利", "研报", "中标", "重组", "并购")
                      if k in (v.get("reason") or ""))), None)
     if pick:

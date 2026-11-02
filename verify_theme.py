@@ -80,7 +80,10 @@ for c, r in sc["by_code"].items():
     ts = r.get("theme_tags") or []
     if len(set(ts)) != len(ts):
         dup.append(c)
-    ids = set((r.get("theme") or {}).get("ids") or [])
+    # 只校验"标签命中的主线"有一一对应的合成标签；关键词命中的主线不进 ntags
+    # （消息面关键词不参与概念分，避免"业绩"这类宽线给全市场普涨一次分）。
+    tag = set(r.get("tags") or [])
+    ids = {theme.classify(t) for t in tag} - {None}
     names = {theme.BY_ID[i]["name"] for i in ids if i in theme.BY_ID}
     if sum(1 for t in ts if t in names) != len(names):
         mismatch.append(c)

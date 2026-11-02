@@ -141,14 +141,8 @@ def run(allow_partial: bool = False) -> dict:
         errors["f10"] = "%s: %s" % (type(e).__name__, e)
         traceback.print_exc()
 
-    # 上榜原因（同花顺逐股异动接口的 reason 字段）——个股页最值钱的一块，
-    # 每只票一次请求，并发抓；整体失败也不拦刷新，页面显示"暂无"。
-    reasons = {}
-    try:
-        reasons = abnormal.fetch_all(list(idx.keys()))
-    except Exception as e:  # noqa: BLE001
-        errors["abnormal"] = "%s: %s" % (type(e).__name__, e)
-        traceback.print_exc()
+    # 异动解析在 attr / lhb 之后抓（见下），因为要按「人气池 ∪ 全市场涨停 ∪
+    # 今日龙虎榜 ∪ 热榜 100」的并集去抓，而不是只抓人气池。
 
     # 龙虎榜（个股上榜）：同花顺 ggph 给机构席位，东财给 30 天全量次数与净买。
     # 这是"资金是不是真站在里面"的独立证据，缺了不影响主榜，只在页面上少两列。
@@ -175,6 +169,30 @@ def run(allow_partial: bool = False) -> dict:
         attr_f.save(at)
     except Exception as e:  # noqa: BLE001
         errors["attr"] = "%s: %s" % (type(e).__name__, e)
+        traceback.print_exc()
+
+    # ---- 异动解析（同花顺逐股异动的 reason + keywordList）：抓**并集**，不是只抓人气池。
+    #      用户 2026-11-02："从所有涨停股里去读异动解析，每只涨停股、龙虎榜里的票、
+    #      同花顺排行 100 里的票都去看一下"。实测 125 只涨停里只有 43 只在人气池内，
+    #      只抓池子等于漏掉 2/3 的涨停股，消息面就数不出来。
+    reasons = {}
+    try:
+        _hot_codes = {x.get("code") for x in (((hot or {}).get("lists") or {}).get("hour") or [])}
+        _hot_codes |= {x.get("code") for x in (((hot or {}).get("lists") or {}).get("day") or [])}
+        _zt_codes = {x.get("code") for x in ((at.get("today") or {}).get("zt") or [])}
+        _lhb_all = (lh or {}).get("by_code") or {}
+        _lhb_days = [str((v.get("last") or {}).get("date") or "") for v in _lhb_all.values()]
+        _lhb_day = max([d for d in _lhb_days if d] or [""])
+        _lhb_codes = {c for c, v in _lhb_all.items()
+                      if str((v.get("last") or {}).get("date") or "") == _lhb_day}
+        _union = ({c for c in idx} | (_zt_codes - {None}) | (_lhb_codes - {None})
+                  | (_hot_codes - {None}))
+        print("  异动解析并集 %d 只（人气池 %d · 涨停 %d · 龙虎榜 %d · 热榜 %d）"
+              % (len(_union), len(idx), len(_zt_codes), len(_lhb_codes), len(_hot_codes)))
+        reasons = abnormal.fetch_all(sorted(_union), workers=12)
+        print("  异动解析命中 %d 只" % len(reasons))
+    except Exception as e:  # noqa: BLE001
+        errors["abnormal"] = "%s: %s" % (type(e).__name__, e)
         traceback.print_exc()
 
     # ---- 驱动词（P3 /drivers）：优先用当日快照的板块口径，缺了就退化成东财涨停池
@@ -245,6 +263,14 @@ def run(allow_partial: bool = False) -> dict:
         "concept_sector": {"blocks": con_blocks, "meta": con_meta},
         # 个股所属板块（F10）：行业链 1~3 个 + 概念板块若干，行业标签不再唯一
         "f10": f10,
+        # 全市场涨停池（东财）：人气池只有 ~141 只，而全市场涨停 ~125 只，
+        # 两者交集只有 43 只。主线要按**全市场涨停**算热度，否则漏掉 2/3 的涨停股。
+        "zt_pool": [{"code": x.get("code"), "name": x.get("name"),
+                     "price": x.get("price"), "amount": x.get("amount"),
+                     "pct": x.get("pct"), "board": x.get("board") or 1,
+                     "days": x.get("days"), "industry": x.get("industry"),
+                     "fund": x.get("fund"), "turnover": x.get("turnover")}
+                    for x in ((at.get("today") or {}).get("zt") or [])],
         "degraded": ["%s（%s）" % (k, v) for k, v in errors.items()],
     }
     meta = {"errors": errors, "n_stocks": len(idx),

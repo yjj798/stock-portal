@@ -1,0 +1,24 @@
+<!doctype html><html lang="en"><head><meta charset="UTF-8"/><link rel="icon" type="image/png" href="//s.thsi.cn/cd/news-p-fe-anomaly-analysis/assets/logo.23243c5e.png"/><link rel="stylesheet" href="https://s.thsi.cn/hxapp/m/base/css/backWash_remx_v4.6.css"/><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no,viewport-fit=cover"/><script type="text/javascript" src="//s.thsi.cn/js/chameleon/chameleon.1.13.min.1793607.js"></script> <script src="//s.thsi.cn/hxapp/m/base/js/skywalking.1.1.16.min.js"></script><script src="//s.thsi.cn/cb?cd/weblog/0.0.1-alpha.43/weblog.js"></script><title>异动解读</title><style>html{font-size:100px!important}body,html{scrollbar-width:none;-ms-overflow-style:none}body::-webkit-scrollbar,html::-webkit-scrollbar{display:none}</style><script type="module" crossorigin src="//s.thsi.cn/cd/news-p-fe-anomaly-analysis/assets/index.8254c48c.js"></script><link rel="modulepreload" crossorigin href="//s.thsi.cn/cd/news-p-fe-anomaly-analysis/assets/vendor.d12767ff.js"/><link rel="stylesheet" href="//s.thsi.cn/cd/news-p-fe-anomaly-analysis/assets/index.2c701ec2.css"/><script type="module">try{import.meta.url;import("_").catch(()=>1);}catch(e){}window.__vite_is_modern_browser=true;</script><script type="module">!function(){if(window.__vite_is_modern_browser)return;console.warn("vite: loading legacy build because dynamic import or import.meta.url is unsupported, syntax error above should be ignored");var e=document.getElementById("vite-legacy-polyfill"),n=document.createElement("script");n.src=e.src,n.onload=function(){System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))},document.body.appendChild(n)}();</script></head><body><div id="app"></div><script crossorigin="anonymous" src="//s.thsi.cn/cb?;cd/ths-frontend-common-lib-container/v1.2.6/common/;bridge.js"></script><script crossorigin="anonymous" src="//s.thsi.cn/cd/b2cweb-fe-common-resource-pod/js/cefApi/1.5.8/cefApi.min.js"></script><script crossorigin="anonymous" src="//s.thsi.cn/cb?;js/m/v2/common/;basic.js"></script><script crossorigin="anonymous" src="//s.thsi.cn/sns/lib/front/thsc-theme/1.1.0/thsc-theme.min.js"></script><script crossorigin="anonymous" src="//s.thsi.cn/cb?;js/m/v2.12/common/;zepto.js;js/m/v2.12/business/;stat.js"></script><script src="https://s.thsi.cn/hxapp/m/base/js/backWash_v4.6.js"></script><script src="//upass.10jqka.com.cn/asset/wechatlogin/js/checkwechat.js"></script><script crossorigin="anonymous" src="//s.thsi.cn/sns/lib/front/snsUtils/0.0.27/snsUtils.js"></script><script>function registerSkyWalking() {
+ const envMode = 'release'
+ let collector = '//khtest.10jqka.com.cn/apm-nginx/skywalking-web/'
+ if (envMode === 'release') {
+ collector = '//apm.hexin.cn/skywalking-web/'
+ }
+ try {
+ window.ClientMonitor.register({
+ collector,
+ service: 'zixun::news-p-fe-anomaly-analysis',
+ pagePath: location.hash.replace('#', '') || '/root',
+ serviceVersion: window.getPlatform() + '_ths_1.1',
+ enableSPA: false,
+ perfEntries: true,
+ rate: 0.1,
+ sendErrorTime: 3000,
+ noTrace: true,
+ })
+ } catch (error) {
+ console.warn(error.message)
+ }
+ }
+
+ registerSkyWalking()</script><script nomodule>!function(){var e=document,t=e.createElement("script");if(!("noModule"in t)&&"onbeforeload"in t){var n=!1;e.addEventListener("beforeload",(function(e){if(e.target===t)n=!0;else if(!e.target.hasAttribute("nomodule")||!n)return;e.preventDefault()}),!0),t.type="module",t.src=".",e.head.appendChild(t),t.remove()}}();</script><script nomodule crossorigin id="vite-legacy-polyfill" src="//s.thsi.cn/cd/news-p-fe-anomaly-analysis/assets/polyfills-legacy.1d4fc27b.js"></script><script nomodule crossorigin id="vite-legacy-entry" data-src="//s.thsi.cn/cd/news-p-fe-anomaly-analysis/assets/index-legacy.7b19e170.js">System.import(document.getElementById('vite-legacy-entry').getAttribute('data-src'))</script></body></html>

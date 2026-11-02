@@ -269,7 +269,8 @@ def main():
             for m in re.finditer(r'href="(?:\.\./)+s/(\d{6})/"', f.read()):
                 extra.add(m.group(1))
     for c in sorted(extra - set(stocks)):
-        put(os.path.join(DIST, "s", c), page_stock.render(c, None, data, meta), 2)
+        put(os.path.join(DIST, "s", c),
+            page_stock.render(c, page_stock.entry_of(c, data), data, meta), 2)
         n += 1
 
     # ---- 收尾：删掉这次没再生成的旧文件（页面集合变化时才几个），

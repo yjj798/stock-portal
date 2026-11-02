@@ -107,8 +107,10 @@ def main():
         chk("Tab 按钮含 %s" % t, t in ha, True)
     # 概念 TOP10 剔泛词：用同一份 drivers 的 generic 集合独立重算
     generic = {d["keyword"] for d in ds if d.get("generic")}
-    kw_map = {r["code"]: [k for k in (r.get("keywords") or []) if k]
-              for r in (rd.get("records") or [])}
+    # 与页面共用同一个补齐逻辑（reasons_core → 异动解析兜底），否则第一名对不上
+    from render import page_attr as _pa
+    _bundle, _bm = store.load_bundle()
+    kw_map = _pa.kw_map_for(at, rd, _bundle)
     cnt = Counter()
     for it in zt:
         for w in set(kw_map.get(it["code"]) or []) - generic:

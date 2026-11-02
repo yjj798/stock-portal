@@ -54,7 +54,7 @@ THEMES = [
         "kw": ["短剧", "漫剧", "微短剧", "AI视频", "AI影视", "人工智能影视", "超清视频",
                "影视", "院线", "传媒", "出版", "IPTV", "长视频", "影视版权",
                "影视内容", "影视制作", "文化传媒", "AI语料", "数字阅读", "IP经济",
-               "知识产权", "版权"],
+               "知识产权", "版权", "影游", "动漫", "网文", "IP运营", "知识付费", "内容审核"],
         "avoid": [],
     },
     {
@@ -76,7 +76,16 @@ THEMES = [
                     "涨的是订单能见度而不是题材想象。",
         "kw": ["CPO", "共封装", "光模块", "光通信", "光纤", "铜缆", "PCB", "覆铜板",
                "存储", "先进封装", "封装", "算力", "液冷", "服务器", "交换机",
-               "铜连接", "光芯片", "硅光"],
+               "铜连接", "光芯片", "硅光", "数据中心", "半导体", "元件", "光刻", "存储芯片"],
+        "avoid": [],
+    },
+    {
+        "id": "game", "name": "游戏", "order": 3,
+        "short": "版号 / 新游 / 电竞",
+        "catalyst": "版号发放与新游上线是这条线的直接催化，"
+                    "和 AI 视频（短剧/漫剧/影视）不是同一条消息——"
+                    "一个是内容形态，一个是审批节奏。",
+        "kw": ["游戏", "版号", "手游", "电竞", "页游"],
         "avoid": [],
     },
     {
@@ -86,7 +95,7 @@ THEMES = [
                     "这条线最宽也最杂，所以只收应用侧，不吞视频/内容侧。",
         "kw": ["AI应用", "AI智能体", "智能体", "多模态", "AIGC", "智谱", "大模型",
                "AI眼镜", "AIPC", "AI手机", "AI教育", "AI办公", "AI营销", "AI安全",
-               "AI工业", "AI医疗"],
+               "AI工业", "AI医疗", "数据要素", "数据确权", "数据库", "物理AI", "AI设计", "AI编程", "AI玩具"],
         "avoid": [],
     },
     {
@@ -111,7 +120,7 @@ THEMES = [
         "short": "白酒 / 乳业 / 食品 / 餐饮",
         "catalyst": "促消费政策与春节备货预期，白酒、乳业、食品是防御+复苏双属性。",
         "kw": ["白酒", "乳业", "食品", "啤酒", "调味品", "预制菜", "餐饮", "免税",
-               "商业百货", "旅游", "酒店"],
+               "商业百货", "旅游", "酒店", "大消费", "百货零售", "商超", "家电", "家居"],
         "avoid": [],
     },
     {
@@ -120,7 +129,7 @@ THEMES = [
         "catalyst": "成交额放大与并购预期，券商与金融科技（IT 供应商）同涨，"
                     "后者弹性更大但更依赖情绪。",
         "kw": ["券商", "证券", "金融科技", "互联网金融", "期货", "银行", "保险",
-               "参股金融", "多元金融"],
+               "参股金融", "多元金融", "智能金融", "数字货币", "稳定币", "跨境支付"],
         "avoid": [],
     },
     {
@@ -129,7 +138,7 @@ THEMES = [
         "catalyst": "创新药出海授权（BD）与医保谈判，"
                     "带的是有管线的创新药和有产能的 CXO。",
         "kw": ["创新药", "医药", "CXO", "减肥药", "医疗器械", "生物医药", "中药",
-               "疫苗", "医疗服务"],
+               "疫苗", "医疗服务", "体外诊断", "血液制品", "减肥"],
         "avoid": [],
     },
     {
@@ -146,7 +155,7 @@ THEMES = [
         "short": "重组 / 国改 / 资产注入",
         "catalyst": "并购六条与国资整合，"
                     "这条线不看行业看事件，个股独立行情居多。",
-        "kw": ["并购重组", "重组", "资产注入", "借壳", "举牌"],
+        "kw": ["并购重组", "重组", "资产注入", "借壳", "举牌", "股权转让", "控制权变更"],
         "avoid": [],
     },
     {
@@ -155,6 +164,28 @@ THEMES = [
         "catalyst": "新车周期与智驾法规推进，零部件跟着整车排产走。",
         "kw": ["汽车零部件", "汽车电子", "整车", "智能驾驶", "车路云", "汽车芯片",
                "轮胎", "汽配"],
+        "avoid": [],
+    },
+    {
+        "id": "report", "name": "业绩（财报）", "order": 4,
+        "short": "三季报超预期 / 扭亏 / 减亏 / 分红",
+        "catalyst": "财报披露期的业绩兑现：预增、扭亏、减亏、单季环比改善。"
+                    "这条线的消息不在新闻里而在公告里，所以异动解析的关键词是"
+                    "「三季报增长」这类，不是题材词。",
+        # 只留"财报"这个词根与明确的业绩词；"高增/大增/预增"这类两字泛词会把
+        # 订单大增、营收高增、产能大增全吞进来（实测曾把 144 只票算成业绩线）。
+        "kw": ["三季报", "半年报", "一季报", "业绩预增", "业绩增长", "业绩超预期",
+               "净利增长", "净利大增", "单季扭亏", "利润增长", "毛利率提升",
+               "扭亏", "减亏", "分红"],
+        "avoid": [],
+    },
+    {
+        "id": "region", "name": "区域题材", "order": 4,
+        "short": "海峡两岸 / 自贸区 / 一带一路",
+        "catalyst": "区域政策与地缘事件（两岸融合、自贸区扩容、一带一路项目），"
+                    "炒的是地图不是行业，票通常按省份被一起买。",
+        "kw": ["海峡两岸", "自贸区", "一带一路", "雄安", "海南", "粤港澳", "长三角",
+               "成渝", "东北振兴", "西部大开发", "深圳本地", "上海本地", "福建", "平潭"],
         "avoid": [],
     },
 ]
@@ -225,7 +256,7 @@ def chain_of(ind_name: str, concepts) -> list:
     return hit
 
 
-def build(stocks, f10, tags_of, cblocks=None) -> dict:
+def build(stocks, f10, tags_of, cblocks=None, extra=None, kwmap=None) -> dict:
     """归并出主线 + 每票归属。
 
     返回
@@ -240,6 +271,13 @@ def build(stocks, f10, tags_of, cblocks=None) -> dict:
     cblocks = cblocks or {}
     stocks = stocks or {}
     f10 = f10 or {}
+    # extra＝池外但今天涨停的票（只有异动解析关键词、没有行情/人气）。
+    # 主线的热度要按全市场涨停算，否则人气池 141 只只能看见 43 只涨停股。
+    extra = extra or {}
+    # kwmap＝每票同花顺异动解析的关键词（4 个左右、当日手挑）。它比 F10 概念板块准：
+    # 一只科技股在 F10 里能挂「算力租赁/数据中心/CPO/液冷」四五个宽板块，
+    # 按标签数投票必然把算力堆到第一；异动解析只给当日的 4 个词，谁主谁次看得清。
+    kwmap = kwmap or {}
 
     # 每票的原始标签 = 同花顺原因/标签 + F10 所属概念板块（后者更规范，覆盖更全）
     raw = {}
@@ -250,28 +288,51 @@ def build(stocks, f10, tags_of, cblocks=None) -> dict:
             if nm:
                 ts.append(nm)
         raw[c] = list(dict.fromkeys(ts))
+    for c, x in extra.items():
+        if c in raw:
+            continue
+        raw[c] = list(dict.fromkeys(x.get("tags") or []))
+
+    def finest_of(c):
+        ind = ((f10.get(c) or {}).get("industries") or [])
+        if ind:
+            return ind[-1]["name"]
+        return ((stocks.get(c) or {}).get("industry")
+                or (extra.get(c) or {}).get("industry"))
 
     # 先算产业链归属（人工映射），再决定主归属——机床这类票要先认到机器人链上
     chain_ids = {}
     for c in raw:
-        ind = ((f10.get(c) or {}).get("industries") or [])
-        finest = ind[-1]["name"] if ind else ((stocks.get(c) or {}).get("industry"))
-        chain_ids[c] = chain_of(finest, (f10.get(c) or {}).get("concepts"))
+        chain_ids[c] = chain_of(finest_of(c), (f10.get(c) or {}).get("concepts"))
 
     by_code, ev = {}, {}
     for c, ts in raw.items():
+        # 关键词命中的主线也算进 ids（证据链更硬），但标签仍是展示用的原始词
         ids = theme_of_tags(ts)
+        for k in (kwmap.get(c) or []):
+            tid = classify(k)
+            if tid and tid not in ids:
+                ids.append(tid)
+        ids = [t["id"] for t in THEMES if t["id"] in set(ids)]
         main = None
         if ids:
             # 主归属优先级：① 产业链命中（人工映射的机器人链这类硬归属）
-            #               ② 命中的主线里证据标签最多的（并列取 order 小的）
+            #               ② 异动解析关键词里占多数的那条线（当日口径最准）
+            #               ③ 命中的主线里证据标签最多的（并列取 order 小的）
             cnt = collections.Counter(classify(t) for t in ts if classify(t))
+            cnt_kw = collections.Counter(classify(k) for k in (kwmap.get(c) or [])
+                                         if classify(k))
             chain = [i for i in (chain_ids.get(c) or []) if i in ids]
-            pool = chain or ids
-            main = max(pool, key=lambda i: (cnt.get(i, 0), -BY_ID[i]["order"]))
-        ind = ((f10.get(c) or {}).get("industries") or [])
-        finest = ind[-1]["name"] if ind else ((stocks.get(c) or {}).get("industry"))
-        by_code[c] = {"ids": ids, "main": main, "chain": chain_ids[c], "finest": finest,
+            if chain:
+                pool, weigh = chain, cnt_kw
+            elif cnt_kw:
+                pool, weigh = [i for i in ids if i in cnt_kw], cnt_kw
+            else:
+                pool, weigh = ids, cnt
+            main = max(pool, key=lambda i: (weigh.get(i, 0), -BY_ID[i]["order"]))
+        by_code[c] = {"ids": ids, "main": main, "chain": chain_ids[c],
+                      "finest": finest_of(c),
+                      "kw": list(kwmap.get(c) or []),
                       "ev": {i: [t for t in ts if classify(t) == i
                                  and not _QUOTE_TAG.search(t)] for i in ids}}
         ev[c] = by_code[c]["ev"]
