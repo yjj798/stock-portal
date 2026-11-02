@@ -67,7 +67,7 @@ def bar_links(html):
 
 def main():
     print("== A 首页四栏 ==")
-    h = http("/")
+    h = http("/board")   # 总览已从 / 迁到 /board
     ps = panes(h)
     chk("栏目数 = 4", len(ps), 4)
     chk("栏目顺序", [k for k, _, _ in ps], HOME_KEYS)
@@ -91,18 +91,18 @@ def main():
 
     print("\n== C 切换与兜底 ==")
     for key in ("pool", "struct", "flow"):
-        p = panes(http("/?t=" + key))
+        p = panes(http("/board?t=" + key))
         chk("?t=%s 只亮该栏" % key, [k for k, on, _ in p if on], [key])
     chk("非法 ?t= 回退第一栏",
-        [k for k, on, _ in panes(http("/?t=zzz")) if on], ["mood"])
-    chk("无参默认第一栏", [k for k, on, _ in panes(http("/")) if on], ["mood"])
+        [k for k, on, _ in panes(http("/board?t=zzz")) if on], ["mood"])
+    chk("无参默认第一栏", [k for k, on, _ in panes(http("/board")) if on], ["mood"])
     # 所有面板始终在 HTML 里：切栏是显隐，不是按需渲染（否则搜索/爬虫/打印会缺内容）
-    chk("切栏不改变 HTML 体积", len(http("/?t=flow")), len(h))
+    chk("切栏不改变 HTML 体积", len(http("/board?t=flow")), len(h))
 
     print("\n== D 真实 href（无 JS 可用）==")
     links = bar_links(h)
     chk("首页 4 个 tab 都有 href", [x[1] for x in links],
-        ["/?t=%s" % k for k in HOME_KEYS])
+        ["/board?t=%s" % k for k in HOME_KEYS])
     chk("默认高亮第一个", [x[2] for x in links], [True, False, False, False])
     snap = [x for x in os.listdir(os.path.join(HERE, "data", "snapshots"))
             if x.endswith(".json")]

@@ -248,6 +248,85 @@ td b.big{font-size:17px;font-variant-numeric:tabular-nums}
 .tp.on{display:block}
 .tp>.card:last-child{margin-bottom:0}
 @media(max-width:640px){.tabs2{gap:4px}.tabs2 a{padding:6px 10px;font-size:12.5px}}
+/* ---- 栏目扩容 + 会员入口（2026-11-02）：导航从 8 栏到 9 栏，手机放不下就横向滚，
+   不再折行——折行会把 sticky 导航撑成两行，遮住正文。 ---- */
+.tabs{overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+.tabs::-webkit-scrollbar{display:none}
+.nauth{display:flex;align-items:center;gap:4px;margin-left:8px;padding-left:10px;
+  border-left:1px solid var(--line);white-space:nowrap}
+.nauth a{font-size:12.5px;color:var(--muted);text-decoration:none;padding:5px 10px;border-radius:8px}
+.nauth a:hover{color:var(--ink);background:var(--hover)}
+.nauth a.cta{background:var(--acc);color:#fff;font-weight:600}
+.nauth a.cta:hover{background:var(--acc);filter:brightness(1.08)}
+.nauth a.me{color:var(--ink);font-weight:600;max-width:110px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:820px){.nauth{padding-left:6px}.nauth a{padding:5px 7px}}
+/* 手机上有 9 个栏目，横滚是必然的。加一道右边缘渐隐当"还能往右划"的提示，
+   否则最后几栏看起来像被裁掉了。 */
+@media(max-width:820px){
+  .tabs{-webkit-mask-image:linear-gradient(90deg,#000 0,#000 86%,transparent 100%);
+        mask-image:linear-gradient(90deg,#000 0,#000 86%,transparent 100%)}
+}
+
+/* ---- 通用按钮 ---- */
+.btn{display:inline-block;font-size:13.5px;font-weight:600;line-height:1.4;padding:9px 18px;
+  border-radius:10px;text-decoration:none;border:1px solid transparent;cursor:pointer;
+  font-family:inherit;-webkit-appearance:none}
+.btn.p{background:var(--acc);color:#fff}
+.btn.p:hover{filter:brightness(1.08)}
+.btn.g{background:var(--card);color:var(--ink);border-color:var(--line)}
+.btn.g:hover{background:var(--hover)}
+.btn.d{background:var(--soft);color:var(--up);border-color:var(--line)}
+.btn[disabled]{opacity:.5;cursor:default;filter:none}
+.btn.sm{font-size:12.5px;padding:5px 12px;border-radius:8px}
+/* ---- 表单 ---- */
+.form{display:grid;gap:12px;max-width:420px}
+.fld{display:grid;gap:5px}
+.fld label{font-size:12px;color:var(--t2);font-weight:600}
+.fld .hint{font-size:11.5px;color:var(--muted);font-weight:400}
+.fld input{font:inherit;font-size:14px;padding:9px 12px;border-radius:9px;
+  border:1px solid var(--line);background:var(--card);color:var(--ink);width:100%}
+.fld input:focus{outline:none;border-color:var(--srchb);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 14%,transparent)}
+.fld input::placeholder{color:var(--muted);opacity:.75}
+.fmsg{font-size:12.5px;padding:9px 12px;border-radius:9px;line-height:1.6}
+.fmsg.err{background:var(--tagNbg);color:var(--tagNck)}
+.fmsg.ok{background:var(--tagbg);color:var(--tagck)}
+.fmsg.note{background:var(--warnbg);border:1px solid var(--warnln);color:var(--t3)}
+.authwrap{max-width:520px;margin:24px auto}
+.authtip{font-size:12.5px;color:var(--muted);margin-top:14px;line-height:1.75}
+/* ---- 首页（landing）---- */
+.lhero{background:var(--card);border:1px solid var(--line);border-radius:16px;
+  padding:44px 34px 38px;margin:10px 0 16px;position:relative;overflow:hidden}
+.lhero::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;
+  background:linear-gradient(90deg,var(--up) 0%,#e8804a 38%,#c9a227 62%,var(--acc) 100%)}
+.lhero h1{font-size:32px;line-height:1.28;margin:10px 0 12px;letter-spacing:-.02em;max-width:19em}
+.lhero p{font-size:15px;color:var(--t2);line-height:1.85;max-width:44em;margin:0 0 8px}
+.lhero .cta{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:22px}
+.lhero .tiny{font-size:12px;color:var(--muted);margin:0}
+.lgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:900px){.lgrid{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.lgrid{grid-template-columns:1fr}.lhero{padding:30px 20px}h1{font-size:24px}}
+.lcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.lcard .n{font-size:11px;color:var(--muted);letter-spacing:.1em}
+.lcard h3{font-size:14.5px;margin:5px 0 7px;font-weight:700}
+.lcard p{font-size:12.5px;color:var(--t2);line-height:1.75;margin:0}
+.lcard a{font-size:12.5px;color:var(--acc);text-decoration:none;display:inline-block;margin-top:9px}
+.lcard a:hover{text-decoration:underline}
+.lcard.off a{color:var(--muted)}
+.steps{display:grid;gap:12px;counter-reset:s}
+.step{display:grid;grid-template-columns:30px 1fr;gap:12px;align-items:start;
+  padding:12px 0;border-top:1px solid var(--line)}
+.step:first-child{border-top:0;padding-top:0}
+.step .i{width:26px;height:26px;border-radius:50%;background:var(--soft);color:var(--t2);
+  font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.step b{font-size:13.5px}
+.step p{font-size:12.5px;color:var(--t2);line-height:1.75;margin:3px 0 0}
+.kv{display:grid;grid-template-columns:88px 1fr;gap:6px 14px;font-size:13px}
+.kv .k{color:var(--muted);font-size:12.5px}
+.kv .v{color:var(--ink);word-break:break-all}
+.foot-note{font-size:11.5px;color:var(--foot);line-height:1.9;margin-top:8px}
+}
 """
 
 # 在 <head> 最早处：① 读 localStorage 应用主题（避免闪白）② 定义全局切换函数。

@@ -198,7 +198,7 @@ def main() -> int:
     chk("缺四维分的票 rec 只剩共振那 45%（不给默认分）",
         all(abs(x["rec"] - round(0.45 * x["score"], 1)) < 0.15
             for x in a if x.get("sc") is None), True)
-    html_home = http("/")
+    html_home = http("/board")   # A 档区块在总览页（/ 已改成介绍页）
     # 注意：CSS 注释里也有「A 档/B 档」字样，必须用带类名的锚点定位
     _a = html_home.find('tier-h a">A 档')
     _b = html_home.find('tier-h b">B 档')

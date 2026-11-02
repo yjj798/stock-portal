@@ -21,18 +21,24 @@ import os
 import sys
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
 
+import accounts
 import store
 import score as scoring
 from picks import pick_stocks
 from sec_core import derive, to_row, WIDE  # noqa: F401  (WIDE 供后续页面复用)
-from render import (page_attr, page_brief, page_concept, page_drivers, page_home,
-                    page_industry, page_rank, page_stock, page_theme)
+from render import (page_attr, page_auth, page_brief, page_concept, page_drivers,
+                    page_home, page_industry, page_landing, page_rank, page_stock,
+                    page_theme)
+from render import nav as navmod
 from render.components import esc
 from render.nav import nav
 from render.shell import no_bundle
 from render.theme import CSS
+
+COOKIE = "wb_sid"
+SESS_MAX_AGE = accounts.SESS_DAYS * 86400
 
 
 # ---------------------------------------------------------------- 页面构建
@@ -81,23 +87,73 @@ def page_placeholder(title: str, desc: str, todo: str) -> str:
 
 def _active_of(title: str) -> str:
     return {"/rank": "/rank", "/concept": "/concept", "/drivers": "/drivers",
-            "/attr": "/attr", "/brief": "/brief"}.get(title, "/")
+            "/attr": "/attr", "/brief": "/brief"}.get(title, "/board")
+
+
+def _one(q, key: str, default: str = "") -> str:
+    """从 parse_qs 的 {k: [v]} 或 _body 的 {k: v} 里取单个值，取不到给默认。"""
+    if not q:
+        return default
+    v = q.get(key)
+    if isinstance(v, list):
+        return v[0] if v else default
+    return default if v is None else str(v)
 
 
 # ---------------------------------------------------------------- HTTP
 class H(BaseHTTPRequestHandler):
-    server_version = "stock-portal/0.1"
+    server_version = "stock-portal/0.2"
+
+    # 每个请求的登录态。do_GET/do_POST 开头都会 _boot()，之后 self.user 就是
+    # 当前会员（None = 未登录）。导航栏读的是 nav 模块的请求级上下文，
+    # 所以这里要顺手 set_ctx，页面里 9 个 render 都不用改签名。
+    user = None
+    token = ""
 
     def log_message(self, fmt, *args):  # 安静一点
+        # 登录/注册这类 POST 不把查询串写进日志：URL 里可能带邮箱
         sys.stderr.write("[%s] %s\n" % (self.log_date_time_string(), fmt % args))
 
-    def _send(self, code: int, body, ctype="text/html; charset=utf-8"):
+    # ---- cookie / 上下文
+    def _cookies(self) -> dict:
+        out = {}
+        for part in (self.headers.get("Cookie") or "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k:
+                out[k] = unquote(v)
+        return out
+
+    def _boot(self) -> None:
+        """解析会话 + 设置导航上下文。任何一个入口进来都必须先跑它。"""
+        self.token = self._cookies().get(COOKIE) or ""
+        self.user = accounts.user_by_token(self.token) if self.token else None
+        navmod.set_ctx(user=self.user, static=False)
+
+    def _secure(self) -> bool:
+        """https 下才加 Secure（本地 http://127.0.0.1 加了就收不到 cookie）。"""
+        return ((self.headers.get("X-Forwarded-Proto") or "").lower() == "https")
+
+    def _cookie_header(self, token: str, max_age: int) -> str:
+        v = "%s=%s; Path=/; HttpOnly; SameSite=Lax; Max-Age=%d" % (COOKIE, token, max_age)
+        return v + ("; Secure" if self._secure() else "")
+
+    def _same_origin(self) -> bool:
+        """POST 的同源校验。SameSite=Lax 已经挡掉跨站带 cookie 的 POST，
+        这里再做一层 Origin 比对，防"浏览器差异 + 老客户端"两种情况。"""
+        o = self.headers.get("Origin")
+        if not o:
+            return True
+        return urlparse(o).netloc == (self.headers.get("Host") or "")
+
+    def _send(self, code: int, body, ctype="text/html; charset=utf-8", headers=None):
         if isinstance(body, str):
             body = body.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        for k, v in (headers or []):
+            self.send_header(k, v)
         self.end_headers()
         try:
             self.wfile.write(body)
@@ -108,16 +164,68 @@ class H(BaseHTTPRequestHandler):
         self._send(code, json.dumps(obj, ensure_ascii=False),
                    "application/json; charset=utf-8")
 
+    def _redirect(self, loc: str, cookie: str = ""):
+        self.send_response(302)
+        self.send_header("Location", loc)
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _qs(self, **kw) -> str:
+        """拼回跳用的查询串，丢掉空值。"""
+        d = {k: v for k, v in kw.items() if v}
+        return ("?" + urlencode(d)) if d else ""
+
+    def _body(self) -> dict:
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            n = 0
+        if n <= 0:
+            return {}
+        if n > 65536:                     # 表单不该这么大，直接当攻击处理
+            return {}
+        raw = self.rfile.read(n).decode("utf-8", "replace")
+        return {k: v[0] for k, v in parse_qs(raw, keep_blank_values=True).items()}
+
     def do_GET(self):
         raw = self.path
         u = urlparse(raw)
         path = u.path.rstrip("/") or "/"
         q = parse_qs(u.query or "")
+        self._boot()
         try:
             if path == "/":
+                return self._landing(q)
+            if path == "/board":
                 return self._home(None, q)
             if path == "/mp":
                 return self._mp()
+            if path == "/login":
+                if self.user:
+                    return self._redirect("/me")
+                return self._send(200, page_auth.render_login(
+                    err=_one(q, "err"), next_=_one(q, "next")))
+            if path == "/register":
+                if self.user:
+                    return self._redirect("/me")
+                return self._send(200, page_auth.render_register(err=_one(q, "err")))
+            if path == "/forgot":
+                return self._send(200, page_auth.render_forgot(
+                    err=_one(q, "err"), ok=_one(q, "ok"), note=_one(q, "note")))
+            if path == "/me":
+                return self._me(q)
+            if path in ("/terms", "/privacy"):
+                return self._send(200, page_auth.render_legal(path[1:]))
+            if path == "/admin/users":
+                # 没配 ADMIN_TOKEN 就当这个页面不存在（404 而不是 403，不暴露入口）
+                if not accounts.admin_ok(_one(q, "t")):
+                    return self._send(404, page_placeholder(
+                        "页面不存在", "没有这个路径：%s" % path, "从顶部导航进入各栏目。"))
+                return self._send(200, page_auth.render_admin(
+                    accounts.admin_list(), _one(q, "t"), accounts.plaintext_on()))
             if path == "/api/latest":
                 return self._api_latest()
             if path == "/api/series":
@@ -151,6 +259,151 @@ class H(BaseHTTPRequestHandler):
             self._send(500, "<h1>500</h1><pre>%s</pre>"
                        % esc(traceback.format_exc()[-1500:]))
 
+    # ---- POST：会员操作全部走这里
+    def _back(self, f, default: str = "/me") -> str:
+        """回跳地址只接受站内相对路径，防止被当开放重定向用。"""
+        b = (f.get("back") or f.get("next") or "").strip()
+        if b.startswith("/") and not b.startswith("//"):
+            return b
+        return default
+
+    def do_POST(self):
+        path = urlparse(self.path).path.rstrip("/") or "/"
+        self._boot()
+        if not self._same_origin():
+            return self._send(403, page_placeholder(
+                "拒绝提交", "这个请求来自站外（Origin 不匹配）。", "回到首页重新操作。"))
+        f = self._body()
+        try:
+            if path == "/login":
+                return self._post_login(f)
+            if path == "/register":
+                return self._post_register(f)
+            if path == "/logout":
+                return self._post_logout()
+            if path == "/forgot":
+                return self._post_forgot(f)
+            if path == "/me/pwd":
+                return self._post_pwd(f)
+            if path == "/me/verify":
+                return self._post_verify(f)
+            if path in ("/watch/add", "/watch/del"):
+                return self._post_watch(path, f)
+            return self._send(404, page_placeholder(
+                "页面不存在", "没有这个提交地址：%s" % path, "回到首页。"))
+        except Exception:
+            traceback.print_exc()
+            self._send(500, "<h1>500</h1><pre>%s</pre>"
+                       % esc(traceback.format_exc()[-1200:]))
+
+    def _ip(self) -> str:
+        xf = (self.headers.get("X-Forwarded-For") or "").split(",")[0].strip()
+        return xf or (self.client_address[0] if self.client_address else "")
+
+    def _post_login(self, f):
+        ident = (f.get("ident") or "").strip()[:120]
+        pwd = f.get("pwd") or ""
+        nxt = self._back(f, "/board")
+        ok, res, _u = accounts.login(ident, pwd, ip=self._ip(),
+                                     ua=self.headers.get("User-Agent") or "")
+        if not ok:
+            # 原样回填账号（方便改错别字），密码一律不回填
+            return self._send(200, page_auth.render_login(err=res, ident=ident, next_=nxt))
+        return self._redirect(nxt, self._cookie_header(res, SESS_MAX_AGE))
+
+    def _post_register(self, f):
+        email = (f.get("email") or "").strip()[:120]
+        uname = (f.get("username") or "").strip()[:20]
+        pwd = f.get("pwd") or ""
+        pwd2 = f.get("pwd2") or ""
+        ok, res = accounts.register(email, uname, pwd, pwd2)
+        if not ok:
+            return self._send(200, page_auth.render_register(err=res, email=email,
+                                                             user_name=uname))
+        ok, tok, _u = accounts.login(email, pwd, ip=self._ip(),
+                                     ua=self.headers.get("User-Agent") or "")
+        if not ok:      # 注册成功但自动登录失败（极少见）：让人工登录一次
+            return self._redirect("/login" + self._qs(ok="注册成功，请登录"))
+        return self._redirect("/me" + self._qs(ok="注册成功，欢迎"),
+                              self._cookie_header(tok, SESS_MAX_AGE))
+
+    def _post_logout(self):
+        accounts.logout(self.token)
+        return self._redirect("/", self._cookie_header("", 0))
+
+    def _post_pwd(self, f):
+        if not self.user:
+            return self._redirect("/login" + self._qs(next="/me"))
+        ok, why = accounts.change_pwd(self.user["id"], f.get("old") or "",
+                                      f.get("pwd") or "", f.get("pwd2") or "",
+                                      keep_token=self.token)
+        return self._redirect("/me" + (self._qs(ok="密码已更新，其它设备已下线") if ok
+                                       else self._qs(err=why)))
+
+    def _post_verify(self, f):
+        if not self.user:
+            return self._redirect("/login" + self._qs(next="/me"))
+        ok, msg, code = accounts.send_code(self.user.get("email") or "", "verify")
+        if not ok:
+            return self._redirect("/me" + self._qs(err=msg))
+        return self._redirect("/me" + self._qs(note=msg, code=code))
+
+    def _post_forgot(self, f):
+        email = (f.get("email") or "").strip()[:120]
+        act = (f.get("act") or "send").strip()
+        if act == "send":
+            ok, msg, code = accounts.send_code(email, "reset")
+            if not ok:
+                return self._send(200, page_auth.render_forgot(err=msg, email=email))
+            return self._send(200, page_auth.render_forgot(
+                ok=msg, note=msg if not code else "", email=email, code=code))
+        ok, why = accounts.reset_pwd(email, f.get("code") or "",
+                                     f.get("pwd") or "", f.get("pwd2") or "")
+        if not ok:
+            return self._send(200, page_auth.render_forgot(err=why, email=email))
+        return self._redirect("/login" + self._qs(ok="密码已重置，请用新密码登录"))
+
+    def _post_watch(self, path: str, f):
+        if not self.user:
+            return self._redirect("/login" + self._qs(next=self._back(f, "/rank")))
+        code = (f.get("code") or "").strip()
+        if path == "/watch/del":
+            accounts.watch_del(self.user["id"], code)
+            return self._redirect(self._back(f), "")
+        name = (f.get("name") or "").strip()
+        if not accounts.watch_add(self.user["id"], code, name):
+            return self._redirect(self._back(f), "")
+        return self._redirect(self._back(f), "")
+
+    # ---- 会员相关页面
+    def _landing(self, q):
+        data, meta = store.load_bundle()
+        try:
+            st = accounts.stats()
+        except Exception:                 # noqa: BLE001  账号库坏了不该拖垮首页
+            traceback.print_exc()
+            st = {}
+        self._send(200, page_landing.render(data, meta, user=self.user, stats=st,
+                                            err=_one(q, "err"), ok=_one(q, "ok"),
+                                            next_=_one(q, "next") or "/board"))
+
+    def _me(self, q):
+        if not self.user:
+            return self._redirect("/login" + self._qs(next="/me"))
+        watches = accounts.watch_list(self.user["id"])
+        data, _meta = store.load_bundle()
+        live = data.get("stocks") or {}
+        zt = {e.get("code"): e for e in (data.get("zt_pool") or [])}
+        live_map = {}
+        for code in {w["code"] for w in watches}:
+            e = live.get(code) or zt.get(code) or {}
+            if e:
+                live_map[code] = {"name": e.get("name"), "pct": e.get("pct")}
+        self._send(200, page_auth.render_me(
+            self.user, watches, sessions=accounts.sessions_of(self.user["id"]),
+            err=_one(q, "err"), ok=_one(q, "ok"), live_map=live_map,
+            mail_note=_one(q, "note"), code=_one(q, "code")))
+
     # ---- 页面
     def _home(self, date8=None, q=None):
         snap, hist, dv, pk, sc = build_home(date8)
@@ -162,8 +415,8 @@ class H(BaseHTTPRequestHandler):
         html = page_home.render(
             snap, hist, dv, pk, sc=sc,
             tab=(q.get("t") or [""])[0],
-            # 分栏链接要带原路径：历史快照页是 /snapshot/20261031，写成 "/" 会把人送回最新一天
-            base=("/snapshot/%s" % date8) if date8 else "/")
+            # 分栏链接要带原路径：历史快照页是 /snapshot/20261031，写成 "/board" 会把人送回最新一天
+            base=("/snapshot/%s" % date8) if date8 else "/board")
         self._send(200, html)
 
     def _mp(self):

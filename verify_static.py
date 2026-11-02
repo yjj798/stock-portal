@@ -72,11 +72,22 @@ def main():
             return f.read()
 
     # ---- 关键内容抽查
+    # 2026-11-02 起 / 是介绍页（DeepSeek 登录页式），总览搬到 /board。
+    # 断言随之拆成两组：首页查"门面 + 登录入口"，/board 查"四栏 tabset"。
     home = page("index.html")
-    chk("首页四栏 tabset", home.count('data-tabs="home"') == 1 and
-        all(('data-k="%s"' % k) in home for k in ("mood", "pool", "struct", "flow")))
-    chk("首页 tab 链接同页查询", 'href="?t=pool"' in home and 'href="/' not in home)
+    chk("首页是介绍页而非总览", 'data-tabs="home"' not in home and
+        ("这个系统在回答什么" in home or "九个栏目" in home))
+    chk("首页有会员入口", ("/login" in home or "t.legaga.top/login" in home)
+        and ("/register" in home or "t.legaga.top/register" in home))
+    chk("首页写明不构成投资建议", "不构成投资建议" in home)
     chk("首页无残留绝对内链", not re.search(r'href="/(rank|concept|drivers|attr|brief|s|snapshot)', home))
+
+    board = page("board/index.html")
+    chk("总览页四栏 tabset", board.count('data-tabs="home"') == 1 and
+        all(('data-k="%s"' % k) in board for k in ("mood", "pool", "struct", "flow")))
+    chk("总览栏链接指回 /board", 'href="../board/?t=pool"' in board)
+    chk("总览页无残留绝对内链", not re.search(r'href="/(rank|concept|drivers|attr|brief|s|snapshot|board)', board))
+    chk("静态站会员页跳动态站", "t.legaga.top" in page("login/index.html"))
 
     rank = page("rank/index.html")
     chk("榜单两栏", 'data-tabs="rank"' in rank and 'data-k="score"' in rank and 'data-k="hot"' in rank)

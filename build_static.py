@@ -24,8 +24,10 @@ import sys
 
 import score as scoring
 import store
-from render import page_attr, page_brief, page_concept, page_drivers, page_home, \
-    page_industry, page_rank, page_stock, page_theme
+from render import (page_attr, page_auth, page_brief, page_concept, page_drivers,
+                    page_home, page_industry, page_landing, page_rank, page_stock,
+                    page_theme)
+from render import nav as navmod
 from sec_core import derive
 
 DIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist")
@@ -33,7 +35,11 @@ DIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist")
 # 概念名里 Windows/URL 不友好的字符 → 目录名替换
 ILLEGAL = re.compile(r'[\\/:*?"<>|\s#%&{}$!\']+')
 KNOWN_SEGS = ["theme", "rank", "concept", "drivers", "industry", "attr", "brief",
-              "s", "snapshot"]
+              "s", "snapshot", "board", "login", "register", "me", "forgot",
+              "terms", "privacy"]
+
+# 静态站没有后端：会员相关路径全部指到动态站
+LIVE_PATHS = ("/login", "/register", "/me", "/forgot", "/admin")
 
 
 def safe_name(name: str) -> str:
@@ -56,8 +62,14 @@ def rewrite(html: str, depth: int) -> str:
             return '%s="%s"' % (attr, raw[1:])          # 同页查询，任何深度都成立
         p, _, q = path.partition("?")
         tail = ""
+        # 会员相关：静态站没有后端，统一指到动态站（含导航栏右上角那两个入口）
+        if p.rstrip("/") in LIVE_PATHS or p.startswith("/admin"):
+            return '%s="%s%s"' % (attr, navmod.SITE_LIVE.rstrip("/"),
+                                  p + (("?" + q) if q else ""))
         if p == "/":
             out, tail = root, q                          # snapshot 分栏要保住 ?t=
+        elif p == "/board":
+            out, tail = root + "board/", q               # 总览已从 / 迁到 /board
         elif p == "/rank":
             out = root + ("rank/day/" if "hot=day" in q else "rank/")
         elif p == "/concept":
@@ -67,7 +79,8 @@ def rewrite(html: str, depth: int) -> str:
             out, tail = root + p[1:] + "/", q            # 保留 ?t=
         elif p.startswith("/s/"):
             out = root + p[1:] + "/"
-        elif p in ("/drivers", "/attr", "/brief", "/industry", "/theme"):
+        elif p in ("/drivers", "/attr", "/brief", "/industry", "/theme",
+                   "/terms", "/privacy"):
             out = root + p[1:] + "/"
         elif p == "/mp":
             return '%s="%s"' % (attr, root)              # 打印视图并入首页
@@ -186,12 +199,30 @@ def _404() -> str:
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             "<title>404 · A 股全景</title>"
             '<script>(function(){var segs=location.pathname.split("/").filter(Boolean);'
-            'var KNOWN=["theme","rank","concept","drivers","industry","attr","brief","s","snapshot"];'
+            'var KNOWN=["theme","rank","concept","drivers","industry","attr","brief","s",'
+            '"snapshot","board","login","register","me","forgot","terms","privacy"];'
             'var root="/";for(var i=0;i<segs.length;i++){'
             'if(KNOWN.indexOf(segs[i])<0){root="/"+segs.slice(0,i+1).join("/")+"/";break}}'
             'document.write(\'<meta http-equiv="refresh" content="0;url=\'+root+\'">\')})();'
             "</script></head><body style=\"font-family:system-ui;padding:40px\">"
             "<h2>404</h2><p>这个路径在静态版里不存在，正在带你回首页……</p></body></html>")
+
+
+def _live_redirect(seg: str) -> str:
+    """静态站上的 /login /register /me /forgot：直接跳动态站。
+
+    这几个页面必须登录态或写库，静态托管做不到。与其给一句"请去动态站"，
+    不如 0 秒跳过去——用户少点一次。
+    """
+    url = navmod.SITE_LIVE.rstrip("/") + "/" + seg
+    return ('<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">'
+            '<meta name="viewport" content="width=device-width,initial-scale=1">'
+            '<meta http-equiv="refresh" content="0;url=%s">'
+            "<title>去会员中心 · A 股全景</title>"
+            '<style>body{font-family:system-ui;padding:48px;text-align:center;'
+            'color:#333;background:#f4f5f7}a{color:#2563eb}</style></head><body>'
+            "<p>会员功能在动态站，正在跳转……</p>"
+            '<p><a href="%s">没跳过去就点这里</a></p></body></html>' % (url, url))
 
 
 def main():
@@ -211,20 +242,35 @@ def main():
         f.write(_404())
 
     n = 0
-    # ---- 首页 + 历史快照（snapshot_job 侧）
+    # 静态站没有后端：导航右上角的登录入口要指向动态站，自选按钮不出现
+    navmod.set_ctx(user=None, static=True)
+
+    # ---- 首页（介绍 + 会员入口）＋ 总览 /board ＋ 历史快照
     from serve import build_home
     dates = store.snapshot_dates()
     for d in dates:
         snap, hist, dv, pk, sc = build_home(d)
         if not snap:
             continue
-        base = "/snapshot/%s" % d if d != dates[-1] else "/"
-        depth = 2 if d != dates[-1] else 0
-        out = os.path.join(DIST, "snapshot", d) if d != dates[-1] else DIST
+        last = (d == dates[-1])
+        base = "/board" if last else "/snapshot/%s" % d
+        depth = 1 if last else 2
+        out = os.path.join(DIST, "board") if last else os.path.join(DIST, "snapshot", d)
         put(out, page_home.render(snap, hist, dv, pk, sc=sc, base=base), depth)
         n += 1
     if not dates:
         sys.exit("没有快照，先跑 snapshot_job.py")
+
+    # 首页放最后写不行（put 会覆盖同名），这里单独写根目录
+    put(DIST, page_landing.render(data, meta, user=None, static=True), 0)
+    n += 1
+    for kind in ("terms", "privacy"):
+        put(os.path.join(DIST, kind), page_auth.render_legal(kind), 1)
+        n += 1
+    # 会员页在静态站指到动态站；仍生成一个跳转页，免得手敲 /login 时 404
+    for seg in ("login", "register", "me", "forgot"):
+        put(os.path.join(DIST, seg), _live_redirect(seg), 1)
+        n += 1
 
     # ---- 榜单（hour 默认 + day）＋ 客户端搜索
     put(os.path.join(DIST, "rank"), page_rank.render(data, meta, tab=""), 1, stocks)

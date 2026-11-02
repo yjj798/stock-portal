@@ -5,3 +5,5 @@ _cmp/
 dist/
 *.tmp
 .*.tmp
+data/users.db*
+data/mail_outbox.log

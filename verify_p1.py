@@ -20,7 +20,8 @@ import sys
 import urllib.request
 
 LIVE = "https://d.legaga.top/"
-LOCAL = "http://127.0.0.1:888/"
+# 2026-11-02：复盘总览从 / 迁到 /board（/ 改成介绍页），对拍要跟着走
+LOCAL = "http://127.0.0.1:888/board"
 PROXY = "http://127.0.0.1:7890"
 HERE = os.path.dirname(os.path.abspath(__file__))
 

@@ -571,6 +571,39 @@ def _hot_card(e) -> str:
     return card("同花顺热榜", body)
 
 
+def _watch_btn(code: str, name: str) -> str:
+    """「加入自选 / 已收藏」按钮。
+
+    只有动态站才出：静态站没有后端，点了也存不进库，出了就是假按钮。
+    未登录时给的是登录链接（带 next 回本页），不是禁用的灰按钮——
+    灰按钮不会告诉人"为什么要登录"。
+    """
+    from . import nav as navmod
+    user, static, _live = navmod.get_ctx()
+    if static:
+        return ""
+    if not user:
+        return ('<a class="btn g sm" style="margin-left:10px" href="/login?next=/s/%s">'
+                '登录后可加自选</a>' % esc(code))
+    try:
+        import accounts
+        has = code in accounts.watch_codes(user["id"])
+    except Exception:                   # noqa: BLE001  账号库异常不该白屏
+        has = False
+    if has:
+        return ('<form method="post" action="/watch/del" style="display:inline;margin:0">'
+                '<input type="hidden" name="code" value="%s">'
+                '<input type="hidden" name="back" value="/s/%s">'
+                '<button class="btn g sm" type="submit" style="margin-left:10px">'
+                '★ 已在自选，点此移除</button></form>' % (esc(code), esc(code)))
+    return ('<form method="post" action="/watch/add" style="display:inline;margin:0">'
+            '<input type="hidden" name="code" value="%s">'
+            '<input type="hidden" name="name" value="%s">'
+            '<input type="hidden" name="back" value="/s/%s">'
+            '<button class="btn p sm" type="submit" style="margin-left:10px">'
+            '☆ 加入自选</button></form>' % (esc(code), esc(name), esc(code)))
+
+
 def render(code: str, e, data, meta) -> str:
     if e is None:
         body = (
@@ -610,12 +643,12 @@ def render(code: str, e, data, meta) -> str:
 
     hero = (
         '<div class="hero"><div class="eyebrow">个股详情</div>'
-        '<div class="hd"><h1>%s</h1><span class="c">%s</span>%s</div>'
+        '<div class="hd"><h1>%s</h1><span class="c">%s</span>%s%s</div>'
         '<div class="hd" style="margin-top:10px"><span class="big %s">¥%.2f</span>'
         '<span class="big %s" style="font-size:19px">%s%%</span></div>'
         '<div class="ln">%s</div></div>'
         % (esc(name), esc(code),
-           tags,
+           tags, _watch_btn(code, name),
            "red" if num(pct) >= 0 else "green",
            num(e.get("price")),
            "red" if num(pct) >= 0 else "green",

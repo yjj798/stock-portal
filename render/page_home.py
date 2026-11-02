@@ -456,7 +456,7 @@ def render(snap, hist, dv, pk, offline_banner: str = "", sc=None,
         THEME_BOOT,
         "<title>每日复盘 · %s</title>" % esc(snap.get("trade_date") or ""),
         "<style>%s</style></head><body>" % _css(),
-        nav("/"),
+        nav("/board"),   # 总览已从 / 迁到 /board（/ 改成介绍页）
         offline_banner,
         ('<div class="wrap"><div class="warn" style="margin-bottom:14px">'
          "<b>部分数据源异常</b>：%s。相关模块显示为「暂无」，不是页面坏了。</div></div>"
