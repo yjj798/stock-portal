@@ -70,6 +70,7 @@ import re
 
 import pinyin_map
 import sector
+import theme as theme_mod
 
 # 泛标签：不指向具体产业逻辑，不参与概念打分（仍会在页面上原样展示）
 #
@@ -83,6 +84,10 @@ WIDE = {
     "深股通", "沪股通", "MSCI中国", "标准普尔", "富时罗素", "股权转让", "举牌", "壳资源",
     "此前涨幅较大", "高股息精选", "证金持股", "同花顺中特估100", "三季报增长", "三季报大增",
     "三季报", "超级品牌", "昨日涨停", "大盘蓝筹", "中字头股票",
+    # 2026-11-02 加：全池 140 只里 33 只挂"人工智能"、47 只挂"央国企改革"，
+    # 这两条不是概念而是底色——挂它的票概念分凭空 +10，等于给普涨日再加一次普涨。
+    # 用户原话："AI 软件里边包含太多，太笼统"。剔除后它们仍作为标签展示，只是不计分。
+    "人工智能", "央国企改革", "国企改革",
     "连续亏损", "预亏预减", "摘帽", "退市风险",
 }
 
@@ -169,11 +174,16 @@ def proxy_trend(e):
 
 
 # ------------------------------------------------------------------ ② 概念
-def build_tags(stocks, trend):
-    """标签池 → {tag: {n, up, strength}}。只保留成分 ≥ TAG_MIN 且非泛标签的。"""
+def build_tags(stocks, trend, ntags=None):
+    """标签池 → {tag: {n, up, strength}}。只保留成分 ≥ TAG_MIN 且非泛标签的。
+
+    ntags（归并后标签）存在时用它：同一主线只计一个合成标签（"AI 视频"），
+    不再让 AI短剧 / AI漫剧 / AI视频 / 短剧游戏 四个细支把一只票的概念分累加四遍。
+    这样"概念集中度"才落在一条线上，而不是散在细支里互相稀释。
+    """
     mem = collections.defaultdict(list)
     for c, e in stocks.items():
-        for t in tags_of(e):
+        for t in ((ntags or {}).get(c) or tags_of(e)):
             mem[t].append(c)
 
     tags = {}
@@ -197,9 +207,9 @@ def build_tags(stocks, trend):
     return tags
 
 
-def concept_raw(e, tags):
+def concept_raw(e, tags, tlist=None):
     tot, detail = 0.0, []
-    for t in tags_of(e):
+    for t in (tlist if tlist is not None else tags_of(e)):
         g = tags.get(t)
         if not g:
             continue
@@ -234,6 +244,7 @@ def concept_raw(e, tags):
 CON_W = {"lu": 30.0, "up": 25.0, "heat": 20.0, "rise": 15.0, "lead": 10.0}
 CON_SEED = 8.0        # 上升占比的先验收缩强度
 CON_MIN_PCT = 3       # 均涨幅至少几只样本才算数
+THEME_HOT = 80.0      # 「强主线」门槛：分数过 80 且涨停 ≥10（普涨日过半分等于全热）
 
 # 这些不是概念，是「今天这只票因为什么异动」的行情描述（同花顺异动 tag 里混进来的）。
 # 拿它当概念会造出"CPO板块下跌"和"共封装光学(CPO)"两个榜位，成员还大面积重合。
@@ -321,6 +332,10 @@ def concept_board(stocks, snap=None, stats=None) -> list:
             "stat_heat": st.get("heat"), "hchg": st.get("hchg"),
             "in_stats": bool(st),
             "homophone": hp, "hp_sound": hp_sound,
+            # 归入哪条消息面主线：细支不消失（它是证据），但要知道它被并到哪去了。
+            "theme_id": theme_mod.classify(name),
+            "theme_name": (theme_mod.BY_ID[theme_mod.classify(name)]["name"]
+                           if theme_mod.classify(name) else None),
         })
 
     if not rows:
@@ -346,6 +361,90 @@ def concept_board(stocks, snap=None, stats=None) -> list:
         r["total"] = round(f_lu + f_up + f_heat + f_rise + f_lead, 1)
 
     rows.sort(key=lambda x: (-x["total"], -x["n"], x.get("concept") or ""))
+    for i, r in enumerate(rows, 1):
+        r["rank"] = i
+    return rows
+
+
+# ---------------------------------------------------------------- 主线（消息面）
+def _board_of(e) -> int:
+    """封板高度：'3天3板'→3、'首板'→1、只有 limit_up 标记→1。"""
+    tag = str((e or {}).get("board_tag") or "")
+    m = re.search(r"(\d+)\s*板", tag)
+    if m:
+        return int(m.group(1))
+    return 1 if (e or {}).get("limit_up") else 0
+
+
+def score_themes(rows, stocks, trend) -> list:
+    """主线热度分：涨停 30 + 上升广度 25 + 人气 20 + 赚钱效应 15 + 龙头 10。
+
+    和概念总榜同一套权重，好处是两张榜可以横向比：主线的分不是另一套玄学，
+    只是把成分从"一个细支"换成"同一条消息的并集"。
+    """
+    for r in rows:
+        allc = [c for c in r["codes"] if c in stocks]
+        # 计分只用**核心成员**（主归属在本线，或产业链归到本线）。
+        # 理由：东方财富把 "AI应用/AIGC" 这类宽板块挂在几十只票上，
+        # 若把关联成员也算进热度，宽主线靠"谁都能挂"就能刷到第一——
+        # 那正是用户说的"AI 软件太笼统"。核心不足 3 只时才退回全体并标 core_fallback。
+        core = [c for c in (r.get("core_codes") or []) if c in stocks]
+        fallback = len(core) < 3
+        codes = allc if fallback else core
+        heights = [_board_of(stocks.get(c)) for c in codes]
+        lu = sum(1 for b in heights if b)
+        mb = max(heights or [0]) or 0
+        best = min([(stocks[c].get("heat_rank") or 999) for c in codes] or [999])
+        # 龙头取「板数最高，其次人气最高」：人气榜第一名会同时挂在十几条主线里，
+        # 拿它当每条线的龙头等于五条线写同一个名字，看不出这条线强在哪。
+        lead_c = max(codes, key=lambda c: (_board_of(stocks.get(c)),
+                                          -(stocks[c].get("heat_rank") or 999)),
+                     default=None)
+        best_name = (stocks.get(lead_c) or {}).get("name") or "" if lead_c else ""
+        heat = sum(1.0 / math.sqrt(max(stocks[c].get("heat_rank") or 999, 1)) for c in codes)
+        slopes = [trend[c]["slope"] for c in codes
+                  if trend.get(c) and trend[c].get("slope") is not None]
+        if slopes:
+            up = sum(1 for x in slopes if x > 0.15) / len(slopes)
+        else:
+            ps = [stocks[c]["pct"] for c in codes if stocks[c].get("pct") is not None]
+            up = (sum(1 for p in ps if p > 0) / len(ps)) if ps else 0.0
+        pcts = [stocks[c]["pct"] for c in codes if stocks[c].get("pct") is not None]
+        avgpct = (sum(pcts) / len(pcts)) if len(pcts) >= CON_MIN_PCT else None
+
+        n = max(len(codes), 1)
+        up_adj = (up * n + 0.5 * CON_SEED) / (n + CON_SEED)
+        f_lu = (22.0 * min(lu, 10) / 10.0
+                + (8.0 if mb >= 3 else 5.0 if mb == 2 else 2.0 if lu else 0.0))
+        f_up = CON_W["up"] * up_adj
+        f_rise = (CON_W["rise"] * 0.5 if avgpct is None
+                  else CON_W["rise"] * max(0.0, min(1.0, (avgpct + 2) / 10.0)))
+        f_lead = CON_W["lead"] * max(0.0, (200 - (best if best < 999 else 200)) / 199.0)
+        r.update({"n": len(allc), "n_scored": len(codes), "core_fallback": fallback,
+                  "n_core": len(core),
+                  "lu": lu, "max_board": mb,
+                  "best_rank": best if best < 999 else None, "best_name": best_name,
+                  "heat": round(heat, 2), "up": round(up, 2), "up_adj": round(up_adj, 3),
+                  "avgpct": round(avgpct, 2) if avgpct is not None else None,
+                  "n_pct": len(pcts),
+                  "sub": {"lu": round(f_lu, 1), "up": round(f_up, 1),
+                          "rise": round(f_rise, 1), "lead": round(f_lead, 1)}})
+        # 人气项按全榜最大值归一，得等所有行算完
+        r["_f_heat"] = heat
+        r["_total0"] = f_lu + f_up + f_rise + f_lead
+
+    mx = max([r["_f_heat"] for r in rows] or [1.0]) or 1.0
+    for r in rows:
+        f_heat = CON_W["heat"] * (r["_f_heat"] / mx)
+        r["sub"]["heat"] = round(f_heat, 1)
+        r["total"] = round(r["_total0"] + f_heat, 1)
+        r.pop("_f_heat", None)
+        r.pop("_total0", None)
+        # 主线热：分数过半（50/100）。这条线只用于页面标注"今日主线"，
+        # 不进个股总分——个股的使用点在双轮共振，两者口径不能混。
+        r["hot"] = bool(r["total"] >= THEME_HOT and r["lu"] >= 10)
+        r["tier"] = ("强" if r["hot"] else "中" if r["total"] >= 65 else "弱")
+    rows.sort(key=lambda x: (-x["total"], -x["n"], x["name"]))
     for i, r in enumerate(rows, 1):
         r["rank"] = i
     return rows
@@ -390,9 +489,15 @@ def build(data) -> dict:
     qdate = data.get("quote_date")
 
     trend = {c: rank_trend(e) for c, e in stocks.items()}
-    tags = build_tags(stocks, trend)
 
-    raws = {c: concept_raw(e, tags)[0] for c, e in stocks.items()}
+    # 消息面主线归并：行业/概念之上那一层。把 AI短剧/AI漫剧/AI视频/出版传媒 这些
+    # 同一条消息的细支并成一条主线，否则集中度全散在细支里，看不出今天到底在炒什么。
+    th = theme_mod.build(stocks, data.get("f10") or {}, tags_of,
+                     (data.get("concept_sector") or {}).get("blocks") or {})
+    ntags = th.get("ntags") or {}
+    tags = build_tags(stocks, trend, ntags)
+
+    raws = {c: concept_raw(e, tags, ntags.get(c))[0] for c, e in stocks.items()}
     pos = sorted(v for v in raws.values() if v > 0)
     p95 = pos[int(len(pos) * 0.95)] if pos else 1.0
 
@@ -410,9 +515,11 @@ def build(data) -> dict:
             "code": c, "name": e.get("name"),
             "total": round(t["pts"] + cp + rp + mp, 1),
             "trend": t, "concept": cp, "reason": rp, "money": mp,
-            "trend_detail": tr, "concept_detail": concept_raw(e, tags)[1],
+            "trend_detail": tr, "concept_detail": concept_raw(e, tags, ntags.get(c))[1],
             "reason_detail": rd, "money_detail": md,
-            "tags": tags_of(e),
+            "tags": tags_of(e),                 # 原始细支（证据链，页面全列）
+            "theme_tags": ntags.get(c) or [],   # 归并后的标签（概念分用的就是它）
+            "theme": (th["by_code"].get(c) or {}),
         }
 
     # 行业维＋双轮共振：加在原四维之后，base100 原样保住（历史可比）。
@@ -425,6 +532,17 @@ def build(data) -> dict:
         r["reso"] = round(float(s.get("reso") or 0.0), 1)
         r["drive"] = s.get("drive") or "无"
         r["total"] = round(r["base100"] + r["ind"] + r["reso"], 1)
+
+    trows = score_themes(th.get("rows") or [], stocks, trend)
+    theme_mod.link_tags(trows, tags)
+    # 把主线名与热度挂回个股，页面不用再查一次表（行业页驱动列、个股页归因卡都要）
+    _nm = {r["id"]: r for r in trows}
+    for c, r in by_code.items():
+        t = r.get("theme") or {}
+        hit = _nm.get(t.get("main")) or {}
+        t["main_name"] = hit.get("name")
+        t["main_total"] = hit.get("total")
+        t["main_rank"] = hit.get("rank")
 
     # 同分时按趋势分高者优先：两套模型给出一样的总分时，
     # 「名次在冲」比「概念热」更值得排在前面，因为前者有时间窗口。
@@ -439,6 +557,10 @@ def build(data) -> dict:
         "ranked": ranked,
         "tags": tags,
         "sector": sec,
+        "theme": {"rows": trows,
+                  "meta": {"n": len(trows),
+                           "n_hot": sum(1 for r in trows if r.get("hot")),
+                           "full": 100.0, "hot_gate": THEME_HOT}},
         "meta": {
             "n": len(by_code),
             "n_with_hist": sum(1 for t in trend.values() if t),
@@ -456,6 +578,8 @@ def build(data) -> dict:
             "n_missing_ind": smeta.get("n_missing", 0),
             "n_hot_ind": smeta.get("n_hot", 0),
             "n_blocks": smeta.get("n_blocks", 0),
+            "n_theme": len(trows),
+            "n_theme_hot": sum(1 for r in trows if r.get("hot")),
         },
     }
 

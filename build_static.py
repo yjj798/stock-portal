@@ -25,14 +25,15 @@ import sys
 import score as scoring
 import store
 from render import page_attr, page_brief, page_concept, page_drivers, page_home, \
-    page_industry, page_rank, page_stock
+    page_industry, page_rank, page_stock, page_theme
 from sec_core import derive
 
 DIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist")
 
 # 概念名里 Windows/URL 不友好的字符 → 目录名替换
 ILLEGAL = re.compile(r'[\\/:*?"<>|\s#%&{}$!\']+')
-KNOWN_SEGS = ["rank", "concept", "drivers", "industry", "attr", "brief", "s", "snapshot"]
+KNOWN_SEGS = ["theme", "rank", "concept", "drivers", "industry", "attr", "brief",
+              "s", "snapshot"]
 
 
 def safe_name(name: str) -> str:
@@ -66,7 +67,7 @@ def rewrite(html: str, depth: int) -> str:
             out, tail = root + p[1:] + "/", q            # 保留 ?t=
         elif p.startswith("/s/"):
             out = root + p[1:] + "/"
-        elif p in ("/drivers", "/attr", "/brief", "/industry"):
+        elif p in ("/drivers", "/attr", "/brief", "/industry", "/theme"):
             out = root + p[1:] + "/"
         elif p == "/mp":
             return '%s="%s"' % (attr, root)              # 打印视图并入首页
@@ -185,7 +186,7 @@ def _404() -> str:
             '<meta name="viewport" content="width=device-width,initial-scale=1">'
             "<title>404 · A 股全景</title>"
             '<script>(function(){var segs=location.pathname.split("/").filter(Boolean);'
-            'var KNOWN=["rank","concept","drivers","industry","attr","brief","s","snapshot"];'
+            'var KNOWN=["theme","rank","concept","drivers","industry","attr","brief","s","snapshot"];'
             'var root="/";for(var i=0;i<segs.length;i++){'
             'if(KNOWN.indexOf(segs[i])<0){root="/"+segs.slice(0,i+1).join("/")+"/";break}}'
             'document.write(\'<meta http-equiv="refresh" content="0;url=\'+root+\'">\')})();'
@@ -240,6 +241,7 @@ def main():
     rd, _ = store.load_reasons()
     put(os.path.join(DIST, "drivers"), page_drivers.render(data, meta, rd=rd), 1)
     n += 1
+    put(os.path.join(DIST, "theme"), page_theme.render(data, meta), 1)
     put(os.path.join(DIST, "industry"), page_industry.render(data, meta), 1)
     n += 1
     at, _ = store.load_attr()

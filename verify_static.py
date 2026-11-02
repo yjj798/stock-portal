@@ -24,6 +24,16 @@ def main():
              for dp, _, fns in os.walk(DIST) for fn in fns if fn.endswith(".html")]
     chk("页面数量 >= 170", len(pages) >= 170)
 
+    # 主线页必须是真页面，不能是空壳：page_theme.render 少传 sc 时会静默退化成
+    # "还没有主线归并结果"，链接检查照样通过（2026-11-02 踩过）。
+    th_page = os.path.join(DIST, "theme", "index.html")
+    if os.path.exists(th_page):
+        ht = open(th_page, encoding="utf-8").read()
+        chk("主线页有正文（非空壳）", "今天在炒哪条消息" in ht)
+        chk("主线页印出主线名", "AI 视频" in ht)
+    else:
+        chk("主线页存在", False)
+
     # ---- 全站链接检查（只查站内相对链接）
     broken, seen = [], set()
     for p in pages:

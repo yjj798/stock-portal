@@ -8,6 +8,7 @@
 # (路径, 名称, 是否建设中)
 TABS = [
     ("/", "复盘", False),
+    ("/theme", "主线", False),
     ("/rank", "榜单", False),
     ("/industry", "行业", False),
     ("/concept", "题材", False),

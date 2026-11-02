@@ -254,6 +254,61 @@ def _score_card(x) -> str:
                 "</div>")
 
 
+def _theme_card(sc, sc_all, data) -> str:
+    """归因主线卡：这只票属于哪条消息、证据是哪些细支、有没有产业链归属。
+
+    用户 2026-11-02：「行业和概念前边还有驱动归因，归因能把后面那些散词收成一条线」。
+    所以这张卡放在评分卡**之前**——先回答"为什么涨"，再看"给了多少分"。
+    """
+    th = (sc or {}).get("theme") or {}
+    if not th:
+        return ""
+    rows = {r["id"]: r for r in ((sc_all or {}).get("theme") or {}).get("rows") or []}
+    ids = [i for i in (th.get("ids") or []) if i in rows]
+    main = th.get("main")
+    ev = th.get("ev") or {}
+    chain = th.get("chain") or []
+
+    parts = []
+    if main and main in rows:
+        r = rows[main]
+        parts.append(
+            '<div class="kv"><div><span>主归属主线</span><b><a class="sl" href="/theme">%s</a>'
+            " · 热度 %.1f / 100（全站第 %d） · 本线 %d 只 / 涨停 %d</b></div></div>"
+            % (esc(r["name"]), r["total"], r.get("rank") or 0, r.get("n") or 0,
+               r.get("lu") or 0))
+        parts.append('<div class="dv-detail"><b>消息面</b>：%s</div>'
+                     % esc(r.get("catalyst") or "—"))
+    else:
+        parts.append('<div class="dv-detail">没有归到任何一条主线上——'
+                     "它的标签都是行业/板块描述，没有落到今天的具体消息面。</div>")
+
+    evs = ev.get(main) or []
+    if evs:
+        chips = "".join('<span class="chip">%s</span>' % esc(t) for t in evs[:12])
+        parts.append('<div class="kv" style="margin:10px 0 6px"><div>'
+                     "<span>证据链（这些细支已被并进上面那条主线，不再各自计分）</span>"
+                     "<b>%d 个</b></div></div><div class=\"tags\">%s</div>"
+                     % (len(evs), chips))
+    others = [i for i in ids if i != main]
+    if others:
+        parts.append('<div class="kv" style="margin:10px 0 6px"><div><span>同时也挂</span>'
+                     "<b>叠加属性，不重复计分</b></div></div><div class=\"tags\">%s</div>"
+                     % "".join('<span class="chip">%s <span class="sub">%d 只</span></span>'
+                               % (esc(rows[i]["name"]), rows[i].get("n") or 0)
+                               for i in others))
+    if chain:
+        nm = "、".join("机器人产业链" if c == "robot" else c for c in chain)
+        parts.append('<div class="dv-detail" style="margin-top:10px">'
+                     "<b>产业链归属（人工映射）</b>：%s。行业链最细一级是「%s」，"
+                     "东财没有「机器人」行业指数（机器人是概念板块 BK0800），"
+                     "机床/工控/减速器是它的上游，所以按产业链归到这里；"
+                     "上面行业列显示的仍是 F10 原始口径。</div>"
+                     % (esc(nm), esc(th.get("finest") or "—")))
+    return card("归因主线<span>行业与概念之上的那一层</span>", "".join(parts),
+                "点标题进 <a class=\"sl\" href=\"/theme\">主线页</a> 看这条消息的全体成员")
+
+
 def _boards_card(sc, data) -> str:
     """行业链 + 概念板块全清单（来源：东财 F10「所属板块」）。
 
@@ -504,6 +559,8 @@ def render(code: str, e, data, meta) -> str:
         hero,
         '<div class="card">%s</div>' % _kpi(e),
         # 四维评分紧随 KPI：这是本页的主评分，回答"它在全池排第几、为什么"。
+        # 归因在前、评分在后：先回答"为什么涨"，再看"给了多少分"。
+        _theme_card(sc, _sc_all, data),
         _score_card(sc),
         _boards_card(sc, data),
         # 上榜原因紧跟在分数后面：用户点进个股页第一个想知道的不是"它多少分"，

@@ -122,12 +122,21 @@ def _drive_table(rows, stocks, title: str, sub: str, empty_text: str, gate=None)
         cpct = i.get("con_pct")
         cnote = ("%d 个概念板块" % len((i.get("labels") or {}).get("con") or [])
                  if (i.get("labels") or {}).get("con") else "无概念板块")
-        body_rows.append("<tr>%s%s%s%s%s%s%s</tr>" % (
+        # 归因主线：行业/概念之上那一层。机床这类票的行业是「机床工具」，
+        # 但市场买卖它的理由是「机器人」——这层关系 F10 里没有，靠产业链人工映射。
+        thm = (r.get("theme") or {})
+        chain_note = ("机器人链" if "robot" in (thm.get("chain") or []) else "")
+        tcell = ('<b>%s</b>' % esc(thm.get("main_name") or "—")) if thm.get("main") else \
+                '<span class="sub">—</span>'
+        if chain_note:
+            tcell += '<div class="sub"><span class="tag n">%s</span></div>' % chain_note
+        body_rows.append("<tr>%s%s%s%s%s%s%s%s</tr>" % (
             td('<a class="sl" href="/s/%s">%s</a>' % (esc(r["code"]),
                                                      esc(r.get("name") or r["code"])), left=True),
             td("<b>%s</b>%s" % (esc(i.get("name") or "—"),
                                '<div class="sub">%s</div>' % chain if chain else ""), left=True),
             td(_pct_cell(i.get("pct"))),
+            td(tcell, left=True),
             td(('<b class="%s">%s %s%%</b><div class="sub">%s</div>'
                 % ("red" if num(cpct) >= 0 else "green", esc(con or "—"),
                    signed(cpct, 2) if cpct is not None else "—", esc(cnote)))
@@ -138,9 +147,9 @@ def _drive_table(rows, stocks, title: str, sub: str, empty_text: str, gate=None)
                % (DRIVE_CLS.get(r["drive"], ""), esc(r["drive"]),
                   '<div class="sub">%s</div>' % esc(why) if why else "")),
         ))
-    return card(title, table(["股票", "行业（最细一级）", "行业涨幅", "最热概念板块", "概念 /25",
-                              "总分 /120", "驱动"],
-                             "".join(body_rows), "l l r l l r l"), sub)
+    return card(title, table(["股票", "行业（最细一级）", "行业涨幅", "归因主线",
+                              "最热概念板块", "概念 /25", "总分 /120", "驱动"],
+                             "".join(body_rows), "l l r l l l r l"), sub)
 
 
 def _note(data) -> str:

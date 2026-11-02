@@ -28,7 +28,7 @@ import score as scoring
 from picks import pick_stocks
 from sec_core import derive, to_row, WIDE  # noqa: F401  (WIDE 供后续页面复用)
 from render import (page_attr, page_brief, page_concept, page_drivers, page_home,
-                    page_industry, page_rank, page_stock)
+                    page_industry, page_rank, page_stock, page_theme)
 from render.components import esc
 from render.nav import nav
 from render.shell import no_bundle
@@ -130,6 +130,8 @@ class H(BaseHTTPRequestHandler):
                 return self._rank(q)
             if path == "/concept":
                 return self._concept(q)
+            if path == "/theme":
+                return self._theme()
             if path == "/industry":
                 return self._industry()
             if path.startswith("/s/"):
@@ -187,6 +189,12 @@ class H(BaseHTTPRequestHandler):
             return self._send(200, no_bundle())
         html = page_concept.render(data, meta, c=(q.get("c") or [""])[0])
         self._send(200, html)
+
+    def _theme(self):
+        data, meta = store.load_bundle()
+        if not data:
+            return self._send(200, no_bundle())
+        self._send(200, page_theme.render(data, meta))
 
     def _industry(self):
         data, meta = store.load_bundle()

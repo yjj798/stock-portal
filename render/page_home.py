@@ -64,6 +64,28 @@ def _sector_mini(sc, limit: int = 8) -> str:
                  "".join(out), "l r r r l")
 
 
+def _theme_mini(sc, limit: int = 5) -> str:
+    """首页主线小表：今天在炒哪几条消息。
+
+    放在行业之前——先看"炒什么消息"，再看"落在哪个行业"，顺序就是归因顺序。
+    """
+    rows = ((sc or {}).get("theme") or {}).get("rows") or []
+    if not rows:
+        return ""
+    out = []
+    for r in rows[:limit]:
+        out.append("<tr>%s%s%s%s%s</tr>" % (
+            td('<a class="sl" href="/theme">%s</a>%s'
+               % (esc(r["name"]),
+                  ' <span class="tag n">强</span>' if r.get("hot") else ""), left=True),
+            td('<b class="%s">%s</b>' % ("red" if r["total"] >= 80 else "", "%.1f" % r["total"])),
+            td("%d 只 / 涨停 %d" % (r.get("n") or 0, r.get("lu") or 0)),
+            td(("%d 板" % r["max_board"]) if r.get("max_board") else '<span class="sub">—</span>'),
+            td(esc(r.get("best_name") or "—"), left=True)))
+    return table(["主线（消息面）", "热度", "成员 / 涨停", "最高", "龙头"],
+                 "".join(out), "l r r r l")
+
+
 def render_narrative(snap, dv) -> str:
     items = build_narrative(snap, dv)
     rows = []
@@ -393,6 +415,11 @@ def render(snap, hist, dv, pk, offline_banner: str = "", sc=None,
              esc((snap.get("themes") or {}).get("date") or "")),
         # 行业维度与题材是两套口径：题材=故事，行业=这一片是不是整体在动。
         # 双轮（两者同时热）的票在 /industry 页有完整名单，这里只给 TOP8 一眼货。
+        # 主线在行业之前：先看今天炒哪条消息，再看它落在哪一片。
+        card("今日主线<span>行业与概念之上的那一层</span>",
+             _theme_mini(sc) or empty("暂无主线数据"),
+             "把 AI 短剧 / AI 漫剧 / 出版传媒这类同一条消息的细支并成一条线 · 见「主线」页"
+             if sc else "主线页见顶部导航"),
         card("行业热度<span>申万行业指数</span>",
              _sector_mini(sc) or empty("暂无行业数据"),
              ("双轮驱动 %d 只 · 完整行业榜见「行业」页"

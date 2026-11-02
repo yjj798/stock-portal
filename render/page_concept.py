@@ -173,10 +173,13 @@ def render(data, meta, q: str = "", c: str = "") -> str:
                 else '<span class="sub" title="只有 %d 只有涨幅数据，样本不足则给中性分">样本不足</span>'
                 % r["n_pct"])
         rise_cls = "" if r["avgpct"] is None else ("red" if r["avgpct"] > 0 else "green")
-        trs.append("<tr>%s%s%s%s%s%s%s%s</tr>" % (
+        thn = r.get("theme_name")
+        trs.append("<tr>%s%s%s%s%s%s%s%s%s</tr>" % (
             td("%d" % r["rank"]),
             td('<a class="sl" href="/concept?c=%s">%s</a>' % (esc(r["concept"]), esc(r["concept"])),
                left=True),
+            td('<a class="sl" href="/theme">%s</a>' % esc(thn) if thn
+               else '<span class="sub">—</span>', left=True),
             td("%d 只" % r["n"]),
             td("%d 只%s" % (r["limit_up"], " · %d 板" % r["max_board"] if r["max_board"] >= 2 else ""),
                "red" if r["limit_up"] else ""),
@@ -189,8 +192,9 @@ def render(data, meta, q: str = "", c: str = "") -> str:
             td("第 %s" % r["best_rank"] if r["best_rank"] else "—"),
             td(_bar(r["sub"], r["total"]), left=True),
         ))
-    tbl = table(["#", "概念", "入榜", "涨停 / 高度", "上升广度", "成员均涨幅", "人气最佳", "概念分（拆解）"],
-                "".join(trs), "l l r l l r r l")
+    tbl = table(["#", "概念（细支）", "归入主线", "入榜", "涨停 / 高度", "上升广度",
+                 "成员均涨幅", "人气最佳", "概念分（拆解）"],
+                "".join(trs), "l l l r l l r r l")
 
     body = "".join([
         head,
@@ -201,7 +205,9 @@ def render(data, meta, q: str = "", c: str = "") -> str:
                     % ((sc.get("sector") or {}).get("meta", {}).get("n_cblocks") or 0,
                        len(crows)),
                     kind="con", limit=60),
-        card("标签口径 · 概念总榜<span>%d 个概念 · 点概念看全部成分与五项拆解</span>" % len(rows), tbl),
+        card("标签口径 · 概念总榜<span>%d 个细支 · 点概念看成分与五项拆解 · "
+             "「归入主线」列说明它被并到哪条消息上（"
+             "<a class=\"sl\" href=\"/theme\">主线页</a>按并集打分）</span>" % len(rows), tbl),
         card("口径说明｜为什么不是「谁上升占比高谁第一」", EXPLAIN),
     ])
     return page("题材 · A 股全景", "/concept", body,

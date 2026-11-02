@@ -1,7 +1,7 @@
 {
  "trade_date": "2026-11-02",
  "as_of": "2026-11-02 15:05:35",
- "collected_at": "2026-11-02T15:53:05.874949+08:00",
+ "collected_at": "2026-11-02T16:05:34.957061+08:00",
  "breadth": {
   "up": 4681,
   "down": 817,
@@ -2803,14 +2803,14 @@
       "code": "300426",
       "name": "华智数媒",
       "change_pct": 20.0,
-      "is_limit_up": true,
+      "is_limit_up": false,
       "highlight": ""
      },
      {
       "code": "301262",
       "name": "海看股份",
       "change_pct": 20.0,
-      "is_limit_up": true,
+      "is_limit_up": false,
       "highlight": ""
      }
     ]
@@ -2831,7 +2831,7 @@
       "code": "300781",
       "name": "因赛集团",
       "change_pct": 20.0,
-      "is_limit_up": true,
+      "is_limit_up": false,
       "highlight": ""
      },
      {
@@ -2859,14 +2859,14 @@
       "code": "600779",
       "name": "水井坊",
       "change_pct": 10.02,
-      "is_limit_up": true,
+      "is_limit_up": false,
       "highlight": ""
      },
      {
       "code": "000995",
       "name": "皇台酒业",
       "change_pct": 10.01,
-      "is_limit_up": true,
+      "is_limit_up": false,
       "highlight": ""
      }
     ]
@@ -2887,14 +2887,14 @@
       "code": "300085",
       "name": "银之杰",
       "change_pct": 20.02,
-      "is_limit_up": true,
+      "is_limit_up": false,
       "highlight": ""
      },
      {
       "code": "300781",
       "name": "因赛集团",
       "change_pct": 20.0,
-      "is_limit_up": true,
+      "is_limit_up": false,
       "highlight": ""
      }
     ]
@@ -3178,9 +3178,9 @@
   {
    "id": "801573",
    "name": "三季报增长",
-   "inc": 2.298,
-   "strength": 28594.938,
-   "main_net": 3000985911.0
+   "inc": 2.305,
+   "strength": 29095.285,
+   "main_net": 3031933430.0
   },
   {
    "id": "801095",
@@ -3275,9 +3275,9 @@
   }
  ],
  "sources": {
-  "fry": "2026-11-02 15:33:51",
-  "lhb": "2026-11-02 15:50:34",
-  "blocks": "2026-11-02 07:52:50",
+  "fry": "2026-11-02 16:03:51",
+  "lhb": "2026-11-02 16:00:42",
+  "blocks": "2026-11-02 08:05:09",
   "overview": "2026-11-02 15:05:35",
   "snapshot_id": "sec-20261102150536-93c5cf0d",
   "qxzb": "2026-11-02 15:35:32"
