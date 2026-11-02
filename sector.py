@@ -39,6 +39,8 @@ import os
 
 import bisect
 
+import atomic
+
 # 行业分三项权重（合计 14）
 IND_W = {"pct": 7.0, "breadth": 4.0, "net": 3.0}
 IND_FULL = 14.0
@@ -177,11 +179,8 @@ def save_hist(date: str, blocks: dict, keep: int = 60) -> str:
                if v.get("pct") is not None}
     for old in sorted(h)[:-keep]:
         h.pop(old, None)
-    os.makedirs(os.path.dirname(HIST), exist_ok=True)
-    tmp = HIST + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(h, f, ensure_ascii=False)
-    os.replace(tmp, HIST)
+    # 原子写 + 唯一 tmp 名：daemon 与手动 refresh 可能同时跑，共用 ".tmp" 会 WinError 5
+    atomic.write_json(HIST, h)
     return HIST
 
 

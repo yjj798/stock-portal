@@ -23,6 +23,8 @@ import time
 import urllib.error
 import urllib.request
 
+import atomic
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 LIVE = os.environ.get("PORTAL_LIVE") or os.path.join(ROOT, "data", "live")
@@ -95,13 +97,10 @@ def _stamp():
 
 def save(name: str, obj, meta: dict = None) -> str:
     """落盘到 data/live/<name>.json，外层包一层元信息（抓取时间/通道）。"""
-    os.makedirs(LIVE, exist_ok=True)
     path = os.path.join(LIVE, name + ".json")
     payload = {"_fetched_at": _stamp(), "_meta": meta or {}, "data": obj}
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False)
-    os.replace(tmp, path)  # 原子替换：读端永远看到完整文件
+    # 唯一 tmp 名 + replace 重试：同机可能有两个 refresh 在跑（daemon / 手动）
+    atomic.write_json(path, payload)
     return path
 
 

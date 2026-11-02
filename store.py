@@ -12,6 +12,8 @@ import os
 import threading
 from typing import Optional, Tuple
 
+import atomic
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.environ.get("PORTAL_DATA") or os.path.join(HERE, "data")
 SNAP_DIR = os.path.join(DATA, "snapshots")
@@ -114,13 +116,9 @@ def load_bundle() -> Tuple[Optional[dict], dict]:
 
 
 def save_bundle(data: dict, meta: dict) -> str:
-    os.makedirs(LIVE_DIR, exist_ok=True)
     import time as _t
     payload = {"fetched_at": _t.strftime("%Y-%m-%dT%H:%M:%S"), "meta": meta, "data": data}
-    tmp = BUNDLE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False)
-    os.replace(tmp, BUNDLE)
+    atomic.write_json(BUNDLE, payload)
     _cache["bkey"] = None
     return BUNDLE
 

@@ -3,3 +3,5 @@ __pycache__/
 _shots/
 _cmp/
 dist/
+*.tmp
+.*.tmp
