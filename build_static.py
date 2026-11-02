@@ -146,6 +146,9 @@ def _concept_data_js(stocks: dict) -> str:
 _RE_FORM = re.compile(r'<form class="search".*?</form>', re.S)
 
 
+WRITTEN: set = set()          # 本次构建真正写出的页面，供「补个股页」只用新页做链接扫描
+
+
 def put(dirpath: str, html: str, depth: int, stocks: dict = None,
         concept_js: bool = False):
     os.makedirs(dirpath, exist_ok=True)
@@ -171,8 +174,10 @@ var WBC=%s;
 })();
 """ % _concept_data_js(stocks or {})
         html = html.replace("</body>", "<script>%s</script></body>" % js, 1)
-    with open(os.path.join(dirpath, "index.html"), "w", encoding="utf-8") as f:
+    out = os.path.join(dirpath, "index.html")
+    with open(out, "w", encoding="utf-8") as f:
         f.write(html)
+    WRITTEN.add(out)
 
 
 def _404() -> str:
@@ -252,13 +257,15 @@ def main():
     # ---- 补齐「被链接但不在池内」的个股页（归因页等会链到涨停池股票；
     #      动态版 page_stock.render 支持 e=None 出占位，静态版同样补上，不留 404）
     extra = set()
-    for dp, _, fns in os.walk(DIST):
-        for fn in fns:
-            if not fn.endswith(".html"):
-                continue
-            with open(os.path.join(dp, fn), encoding="utf-8") as f:
-                for m in re.finditer(r'href="(?:\.\./)+s/(\d{6})/"', f.read()):
-                    extra.add(m.group(1))
+    # 只扫这次写出的页（WRITTEN），不扫整个 dist：dist 现在不整目录删，
+    # 里面可能留着上一次的旧页，扫进去会凭空补出几只已经不在池里的个股页，
+    # 页数每次构建都往上漂（实测 272→275），破坏"同数据同输出"的可复现性。
+    for p in sorted(WRITTEN):
+        if not p.endswith(".html"):
+            continue
+        with open(p, encoding="utf-8") as f:
+            for m in re.finditer(r'href="(?:\.\./)+s/(\d{6})/"', f.read()):
+                extra.add(m.group(1))
     for c in sorted(extra - set(stocks)):
         put(os.path.join(DIST, "s", c), page_stock.render(c, None, data, meta), 2)
         n += 1
