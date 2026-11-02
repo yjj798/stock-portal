@@ -284,7 +284,7 @@ def main():
             if os.path.isfile(p):
                 with open(p, encoding="utf-8") as f:
                     lh = f.read()
-                chk("静态 /login 跳动态站", "t.legaga.top/login" in lh)
+                chk("静态 /login 给出动态站地址", "t.legaga.top/login" in lh)
             else:
                 chk("静态 /login 存在", False)
         else:
