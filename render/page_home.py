@@ -37,6 +37,33 @@ def fill_defaults(snap: dict) -> dict:
 
 
 # ---------------------------------------------------------------- 当日结论
+# ---------------------------------------------------------------- 行业热度（v3 新增）
+def _sector_mini(sc, limit: int = 8) -> str:
+    """首页的行业热度小表：哪一片在整体动。
+
+    数据来自 score.build 里顺带算好的 sector 行业榜（评分类口径，不是快照的
+    精选板块）——放这里是为了和「下一交易日题材前瞻」形成故事/行业的对照：
+    题材讲的是故事，行业讲的是这一片是不是真的在动。
+    """
+    rows = ((sc or {}).get("sector") or {}).get("rows") or []
+    if not rows:
+        return ""
+    out = []
+    for r in rows[:limit]:
+        out.append("<tr>%s%s%s%s%s</tr>" % (
+            td("<b>%s</b>%s" % (esc(r["name"]),
+                                ' <span class="tag n">热</span>' if r["hot"] else ""),
+               left=True),
+            td('<b class="%s">%s%%</b>' % ("red" if num(r["pct"]) >= 0 else "green",
+                                           signed(r["pct"], 2))),
+            td("%s / %s" % (r["up"] if r["up"] is not None else "—",
+                            r["down"] if r["down"] is not None else "—")),
+            td(('%d' % r["lu"]) if r["lu"] else '<span class="sub">0</span>'),
+            td(esc(r.get("leader") or "—"), left=True)))
+    return table(["行业", "指数涨幅", "涨 / 跌", "池内涨停", "领涨股"],
+                 "".join(out), "l r r r l")
+
+
 def render_narrative(snap, dv) -> str:
     items = build_narrative(snap, dv)
     rows = []
@@ -364,6 +391,13 @@ def render(snap, hist, dv, pk, offline_banner: str = "", sc=None,
     flow = "".join([
         card("下一交易日题材前瞻", theme_html or empty("暂无题材前瞻数据"),
              esc((snap.get("themes") or {}).get("date") or "")),
+        # 行业维度与题材是两套口径：题材=故事，行业=这一片是不是整体在动。
+        # 双轮（两者同时热）的票在 /industry 页有完整名单，这里只给 TOP8 一眼货。
+        card("行业热度<span>申万行业指数</span>",
+             _sector_mini(sc) or empty("暂无行业数据"),
+             ("双轮驱动 %d 只 · 完整行业榜见「行业」页"
+              % (((sc or {}).get("meta") or {}).get("n_double") or 0))
+             if sc else "行业页见顶部导航"),
         card("龙虎榜",
              grid4([("机构席位", lhb.get("org_count", 0), "家"),
                     ("营业部席位", lhb.get("seat_count", 0), "个"),

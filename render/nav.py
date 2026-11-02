@@ -9,6 +9,7 @@
 TABS = [
     ("/", "复盘", False),
     ("/rank", "榜单", False),
+    ("/industry", "行业", False),
     ("/concept", "题材", False),
     ("/drivers", "驱动词", False),
     ("/attr", "归因", False),

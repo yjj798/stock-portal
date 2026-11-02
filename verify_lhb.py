@@ -49,15 +49,28 @@ def main():
 
     sc = scoring.build(data)
     r1 = sc["ranked"][0]
-    chk("红太阳综合分全池第 1", r1["code"], "000525")
+    # v3 加了行业维＋双轮共振（用户令：行业和概念同时热要加分）。收盘池每天换血，
+    # 谁第一、base100 谁最高都是当日事实，钉死必翻车。守结构：
+    #   ① base100 与 total 各自严格降序（两套口径都成立）；
+    #   ② 第 1 名有硬逻辑支撑（drive ∈ 双轮/概念/行业）且严格领先；
+    #   ③ base100 第 1 的分数 ≥ 65（四维口径没有通胀）。
+    b1 = max(sc["ranked"], key=lambda r: r["base100"])
+    chk("base100 全部在 0~100（四维口径未越界）",
+        all(0 <= r["base100"] <= 100.01 for r in sc["ranked"]), True)
+    chk("total ≥ base100（行业分与共振非负）",
+        all(r["total"] >= r["base100"] - 0.001 for r in sc["ranked"]), True)
+    chk("综合分第 1 名有硬逻辑支撑", r1["drive"] in ("双轮", "概念", "行业"), True)
     # 分数随当日行情变化（午盘/收盘不同），别把某一天的 87.4 钉死；
-    # 真正要守的是"它凭什么第一"——四维要拉开差距，不是刚好压线。
-    chk("红太阳总分 ≥ 70 且严格第一（领先第 2 名 > 0）",
+    # 真正要守的是"它凭什么第一"——分数要拉开差距，不是刚好压线。
+    chk("总分 ≥ 70 且严格第一（领先第 2 名 > 0）",
         r1["total"] >= 70 and r1["total"] > sc["ranked"][1]["total"], True)
-    tags = [d["tag"] for d in r1["concept_detail"]]
-    chk("三季报扭亏计入概念趋势", "三季报扭亏" in tags, True)
+    chk("base100 第 1 分数 ≥ 65（四维口径未通胀）", b1["base100"] >= 65, True)
+    all_tags = [d["tag"] for r in sc["by_code"].values() for d in r["concept_detail"]]
+    # 扭亏标签是否参与打分是**口径事实**，不随当日池子变；守口径层而不是守当日样本。
+    chk("三季报扭亏不在泛标签（应计入趋势）", "三季报扭亏" not in scoring.WIDE, True)
+    chk("三季报扭亏不被当情绪词", "扭亏" not in scoring.SOFT.pattern, True)
     chk("三季报增长仍是泛标签", "三季报增长" in scoring.WIDE, True)
-    chk("羊字辈仍在概念明细", "羊字辈" in tags, True)
+    chk("羊字辈标签未被移出标签池", "羊字辈" not in scoring.WIDE, True)
 
     html_rank = page_rank.render(data, meta)
     chk("综合分表列头为 10 日排名", "10 日排名" in html_rank, True)
@@ -81,20 +94,23 @@ def main():
         chk("冰山冷热详情页印出上榜 23 次", "23 次" in html_530, True)
         chk("冰山冷热详情页印出机构 93 席", "93 席" in html_530, True)
 
-    # A 档榜单通道
+    # A 档榜单通道：哪只票进 A 档是当日事实（收盘池 137 只 vs 午盘 177 只完全不同），
+    # 钉死红太阳必翻车。守结构：A 档非空、榜单通道门槛生效、页面真的印出来了。
     d8, snap = store.load_snapshot(None)
     dv = derive(snap, [], None)
     pk = pick_stocks(snap, dv, sc)
     a_names = [x["name"] for x in pk["a"]]
-    chk("红太阳进首页 A 档", "红太阳" in a_names, True)
-    a525 = [x for x in pk["a"] if x["code"] == "000525"]
-    chk("红太阳走榜单通道", a525 and a525[0].get("via") == "score", True)
+    chk("首页 A 档非空", len(a_names) > 0, True)
     chk("榜单通道门槛 75/30 生效（B 档无人混入）",
         all(x.get("via") == "resonance" or (x.get("sc") or 0) >= 75 for x in pk["a"]), True)
+    chk("A 档每只都在综合分模型里",
+        all(x["code"] in sc["by_code"] for x in pk["a"] if x.get("via") == "score"), True)
     html_home = page_home.render(snap, [], dv, pk, sc=sc)
     _a = html_home.find("tier-h a")          # CSS 注释里也有"A 档"字样，用类名定位
     _b = html_home.find("tier-h b")
-    chk("首页 A 档印出红太阳", 0 <= _a < _b and "红太阳" in html_home[_a:_b], True)
+    chk("首页 A 档印出至少一只票", 0 <= _a < _b and _b - _a > 200, True)
+    if a_names:
+        chk("首页 A 档印出 A 档第一名", a_names[0] in html_home[_a:_b], True)
     chk("首页有榜单通道徽章", "榜单通道" in html_home, True)
     chk("首页含配色新类", "tier-h a" in html_home and 'class="pk a"' in html_home, True)
 

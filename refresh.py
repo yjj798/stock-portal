@@ -19,9 +19,10 @@ import traceback
 
 import normalize
 import reasons_core
+import sector
 import store
-from fetchers import (abnormal, attr as attr_f, brieffeed, hotlist_ths, lhb, renqi,
-                      spot as spot_f, tdx_rank)
+from fetchers import (abnormal, attr as attr_f, brieffeed, hotlist_ths, industry as industry_f,
+                      lhb, renqi, spot as spot_f, tdx_rank)
 
 
 def _snap_for_reasons(qdate8: str, bundle_stocks: dict):
@@ -96,6 +97,26 @@ def run(allow_partial: bool = False) -> dict:
         print("  行情覆盖 %d/%d 只（实时源）" % (n_cov, len(idx)))
     except Exception as e:  # noqa: BLE001
         errors["spot"] = "%s: %s" % (type(e).__name__, e)
+        traceback.print_exc()
+
+    # ---- 行业板块（申万行业指数）：概念讲的是"故事"，行业讲的是"这一片是不是
+    #      整体在动"。两者都要，评分才能区分「单一题材硬炒」与「行业＋题材双轮」。
+    #      行业归属（f100）已由上面的 spot 覆盖带进 idx；这里只补板块指数读数。
+    ind_blocks, ind_meta = {}, {}
+    try:
+        ind_blocks = industry_f.fetch(save=True)
+        by_code = {c: e["industry"] for c, e in idx.items() if e.get("industry")}
+        n_match = sum(1 for v in by_code.values() if v in ind_blocks)
+        ind_meta = {"n_blocks": len(ind_blocks), "n_code": len(by_code),
+                    "n_matched": n_match,
+                    "at": time.strftime("%Y-%m-%d %H:%M:%S")}
+        print("  行业板块 %d 个 · 池内 %d/%d 只能对上行业指数"
+              % (len(ind_blocks), n_match, len(idx)))
+        # 09:15 前拿到的是昨日收盘，写成今天会污染"较昨日"的历史序列
+        if time.strftime("%H:%M") >= "09:15":
+            sector.save_hist(time.strftime("%Y-%m-%d"), ind_blocks)
+    except Exception as e:  # noqa: BLE001
+        errors["industry"] = "%s: %s" % (type(e).__name__, e)
         traceback.print_exc()
 
     # 上榜原因（同花顺逐股异动接口的 reason 字段）——个股页最值钱的一块，
@@ -191,6 +212,13 @@ def run(allow_partial: bool = False) -> dict:
         "abnormal": reasons,
         "lhb": (lh or {}).get("by_code") or {},
         "lhb_meta": {k: v for k, v in (lh or {}).items() if k != "by_code"},
+        # 行业维度：blocks 是全市场行业指数读数（分位按全市场算，不按池内），
+        # by_code 是池内个股的行业归属。两者分开放，页面与评分各取所需。
+        "industry": {
+            "blocks": ind_blocks,
+            "by_code": {c: e["industry"] for c, e in idx.items() if e.get("industry")},
+            "meta": ind_meta,
+        },
         "degraded": ["%s（%s）" % (k, v) for k, v in errors.items()],
     }
     meta = {"errors": errors, "n_stocks": len(idx),
@@ -202,6 +230,7 @@ def run(allow_partial: bool = False) -> dict:
             "n_attr": len((at.get("today") or {}).get("zt") or []),
             "n_zb": len((at.get("today") or {}).get("zb") or []),
             "n_driver": len(rd.get("drivers") or []),
+            "n_industry": len(ind_blocks),
             "n_brief": len(br.get("reports") or [])}
     store.save_bundle(bundle, meta)
     return {"meta": meta, "bundle": bundle}

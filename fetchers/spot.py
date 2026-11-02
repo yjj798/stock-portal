@@ -25,7 +25,10 @@ EM_URL = ("https://push2.eastmoney.com/api/qt/clist/get"
           "?pn=1&pz=6000&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281"
           "&fltt=2&invt=2&fid=f3"
           "&fs=m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048"
-          "&fields=f2,f3,f5,f6,f8,f12,f14,f18")
+          # f100 = 所属行业（申万二级名，如「软件开发」「光伏设备」）。
+          # 这一个字段就是全市场行业归属的真值——比按名字/概念猜准得多，
+          # 而且和行业板块指数（m:90+t:2）用同一套行业名，能直接对上。
+          "&fields=f2,f3,f5,f6,f8,f12,f14,f18,f100")
 
 SINA_URL = "https://hq.sinajs.cn/list="
 SINA_HDRS = {"Referer": "https://finance.sina.com.cn",
@@ -53,11 +56,14 @@ def _em() -> dict:
             price = r.get("f2")
             if len(code) != 6 or not isinstance(price, (int, float)) or price <= 0:
                 continue                  # 停牌 / 无价：跳过，别用 0 覆盖
+            ind = str(r.get("f100") or "").strip()
             out[code] = {"price": float(price),
                          "pct": r.get("f3") if isinstance(r.get("f3"), (int, float)) else None,
                          "amount": r.get("f6") if isinstance(r.get("f6"), (int, float)) else None,
                          "turnover": r.get("f8") if isinstance(r.get("f8"), (int, float)) else None,
-                         "prev_close": r.get("f18") if isinstance(r.get("f18"), (int, float)) else None}
+                         "prev_close": r.get("f18") if isinstance(r.get("f18"), (int, float)) else None,
+                         # "-" 是东财给"无行业"（新股/停牌/纯 B 股）的占位，不能当行业名用
+                         "industry": ind if ind and ind != "-" else None}
         if len(diff) < 100:            # 最后一页不满 100 只 = 到头了
             break
         pn += 1
@@ -141,7 +147,12 @@ def load():
 
 
 def overlay(stocks: dict, spot: dict) -> int:
-    """把行情覆盖进个股索引，返回覆盖条数。只动四个行情字段。"""
+    """把行情覆盖进个股索引，返回覆盖条数。
+
+    只动行情字段与「所属行业」：价格/涨幅/成交额/换手来自实时快照，
+    行业归属（f100）也从这里顺手带进来——全市场一次翻页就有，
+    不必再去单独发一轮 5400 只的请求。
+    """
     n = 0
     for code, e in stocks.items():
         s = spot.get(code)
@@ -154,6 +165,8 @@ def overlay(stocks: dict, spot: dict) -> int:
             e["amount"] = s["amount"]
         if s.get("turnover"):
             e["turnover"] = s["turnover"]
+        if s.get("industry"):
+            e["industry"] = s["industry"]
         e["quote_at"] = "spot"
         n += 1
     return n

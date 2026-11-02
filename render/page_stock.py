@@ -155,14 +155,20 @@ def _reason_card(ab, quote_date: str = "") -> str:
 
 
 def _score_card(x) -> str:
-    """四维综合评分拆解 —— 这是本页的主评分，与「人气榜原始因子」是两套口径。
+    """五维综合评分拆解 —— 这是本页的主评分，与「人气榜原始因子」是两套口径。
 
     每一项都必须把"分数从哪来"写在同一行：只给一个 28 分，读者无法判断
-    是"名次涨得猛"还是"已经在第 5 名所以位置分高"，而这两件事的风险完全不同。
+   是"名次涨得猛"还是"已经在第 5 名所以位置分高"，而这两件事的风险完全不同。
+
+    行业那一行是 v3 新增的：题材（故事）与行业（这一片是不是整体在动）分开看，
+    同时热才给共振分。缺行业归属的票如实写"无行业数据"，不按 0 分行业算。
     """
     if not x:
         return ""
     t, c, r, m = x["trend"], x["concept"], x["reason"], x["money"]
+    ind = x.get("industry") or {}
+    ip, reso = x.get("ind") or 0.0, x.get("reso") or 0.0
+    full_ind = (x.get("_ind_full") or 14)
     td_, cd, rd, md = x.get("trend_detail") or {}, x.get("concept_detail") or [], \
         x.get("reason_detail") or {}, x.get("money_detail") or {}
 
@@ -208,19 +214,42 @@ def _score_card(x) -> str:
     else:
         mn = md.get("note") or "—"
 
-    head = ('<div class="shd"><b>%s</b><span class="sub">/100</span>'
-            '<em>全池第 %d 名（共 %d 只）</em></div>'
-            % (trim(x["total"], 1), x.get("rank") or 0, x.get("_n") or 0))
+    # 行业行：行业名 + 指数涨幅 + 全市场分位 + 板块涨跌家数；双轮的写出加成来源
+    if ind.get("name"):
+        in_ = ("%s %s%% · 全市场行业分位 %.0f%% · 板块涨跌 %s/%s"
+               % (ind["name"], signed(ind.get("pct"), 2),
+                  (ind.get("pct_rank") or 0) * 100,
+                  ind.get("up") if ind.get("up") is not None else "—",
+                  ind.get("down") if ind.get("down") is not None else "—"))
+        if x.get("reso"):
+            in_ += "　→　行业热 × 概念热，共振 +6"
+    else:
+        in_ = "无行业归属数据（当日无行情，行业取不到）—— 这一维计 0 分，不是行业弱"
 
-    return card("综合评分<span>排名趋势 35 + 概念趋势 25 + 上榜原因 20 + 资金 20</span>",
+    drive = x.get("drive") or "无"
+    drive_txt = {"双轮": "行业＋概念 双轮驱动", "行业": "行业驱动（概念未热）",
+                 "概念": "概念驱动（行业未热）", "无": "两个维度都不热"}.get(drive, drive)
+
+    head = ('<div class="shd"><b>%s</b><span class="sub">/120</span>'
+            '<em>全池第 %d 名（共 %d 只）· 原四维 %s 分 · %s</em></div>'
+            % (trim(x["total"], 1), x.get("rank") or 0, x.get("_n") or 0,
+               trim(x.get("base100") or 0, 1), esc(drive_txt)))
+
+    return card("综合评分<span>趋势 35 + 概念 25 + 行业 14 + 原因 20 + 资金 20 ＋ 双轮共振 6"
+                "</span>",
                 head + row("排名趋势", t["pts"], 35, esc(tn))
                 + row("概念趋势", c, 25, esc(cn))
+                + row("行业热度", ip, full_ind, esc(in_))
                 + row("上榜原因", r, 20, esc(rn))
                 + row("资金", m, 20, esc(mn))
+                + row("双轮共振", reso, 6,
+                      ("行业与概念同时热 → 双轮，加满分 6"
+                       if reso else "行业与概念未同时热 → 0（单边不给分，避免榜单通胀）"))
                 + '<div class="dv-detail" style="margin-top:10px">'
                 "这是本机自算的口径，与下方「人气榜原始因子」不同源："
                 "那套是上游按热度/动量/位置加权，抓不到「名次正在快速上冲」这件事，"
-                "所以另算一套。两套并列展示，判断时以四维为主、原始因子作参照。"
+                "所以另算一套。前四项合计 100 分是原口径一分未改，"
+                "行业 14 与共振 6 是新增的两笔——老分数仍可与历史结论对照。"
                 "</div>")
 
 

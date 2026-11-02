@@ -1,8 +1,27 @@
 # -*- coding: utf-8 -*-
-"""个股综合评分 v2 —— 四维加权：排名趋势 35 + 概念趋势 25 + 上榜原因 20 + 资金 20。
+"""个股综合评分 v3 —— 五维加权：排名趋势 35 + 概念趋势 25 + 上榜原因 20 + 资金 20
+＋ 行业热度 14，另加双轮共振 6（满分 120）。
 
-为什么推翻旧口径
-----------------
+v3 相对 v2 只做加法
+------------------
+v2 四维（100 分）**一分未改**，原样留在 `base100` 里，历史结论仍可对得上。
+新增两笔加在总分后面：
+    行业热度 0~14 —— 它这一片是不是整体在动（详见 sector.py）
+    双轮共振 0~6  —— 行业在加速 **且** 概念也在热，双重硬逻辑才给
+单边热（只有行业、或只有概念）不加共振分：给了就等于给所有概念热票普涨一次，
+榜单会整体通胀，反而看不出"双轮"的稀缺。
+
+为什么要区分行业与概念
+----------------------
+概念是同花顺按涨停原因归的故事标签（羊字辈、脑机接口、CPO）。一只票挂上热门词
+概念分就上去了，哪怕整个行业在跌、只有它一只在动；反过来行业整体抬升（影视院线
+集体复苏）时，票就算没有题材词也会被算成"没逻辑"。两个维度问的是不同问题：
+    行业＝这一片是不是整体在动（同涨同跌，产业景气驱动）
+    概念＝有没有一个故事把若干票串起来（题材联动，资金偏好驱动）
+两者同时成立，才是"双重硬逻辑"；只有一边，多半是一日游。
+
+v2 原文（口径未变）
+------------------
 旧「综合分」直接用上游人气榜的 `score_final`，本质是**静态截面打分**：热度多高、
 资金多少、几个板。它抓不到最重要的一件事——**这只票的名次正在以多快的速度往上冲**。
 
@@ -50,6 +69,7 @@ import math
 import re
 
 import pinyin_map
+import sector
 
 # 泛标签：不指向具体产业逻辑，不参与概念打分（仍会在页面上原样展示）
 #
@@ -395,6 +415,17 @@ def build(data) -> dict:
             "tags": tags_of(e),
         }
 
+    # 行业维＋双轮共振：加在原四维之后，base100 原样保住（历史可比）。
+    sec = sector.build(data, by_code)
+    for c, r in by_code.items():
+        s = (sec.get("by_code") or {}).get(c) or {}
+        r["base100"] = r["total"]
+        r["industry"] = s
+        r["ind"] = round(float(s.get("pts") or 0.0), 1)
+        r["reso"] = round(float(s.get("reso") or 0.0), 1)
+        r["drive"] = s.get("drive") or "无"
+        r["total"] = round(r["base100"] + r["ind"] + r["reso"], 1)
+
     # 同分时按趋势分高者优先：两套模型给出一样的总分时，
     # 「名次在冲」比「概念热」更值得排在前面，因为前者有时间窗口。
     ranked = sorted(by_code.values(),
@@ -402,16 +433,29 @@ def build(data) -> dict:
     for i, r in enumerate(ranked, 1):
         r["rank"] = i
 
+    smeta = sec.get("meta") or {}
     return {
         "by_code": by_code,
         "ranked": ranked,
         "tags": tags,
+        "sector": sec,
         "meta": {
             "n": len(by_code),
             "n_with_hist": sum(1 for t in trend.values() if t),
             "n_tags": len(tags),
             "p95_concept_raw": round(p95, 1),
             "n_capped_reason": sum(1 for r in by_code.values() if r["reason"] >= 20),
+            "full": 120,
+            "base_full": 100,
+            "ind_full": smeta.get("full", 14.0),
+            "reso_full": smeta.get("reso_full", 6.0),
+            "n_double": smeta.get("n_double", 0),
+            "n_ind_only": smeta.get("n_ind_only", 0),
+            "n_con_only": smeta.get("n_con_only", 0),
+            "n_none": smeta.get("n_none", 0),
+            "n_missing_ind": smeta.get("n_missing", 0),
+            "n_hot_ind": smeta.get("n_hot", 0),
+            "n_blocks": smeta.get("n_blocks", 0),
         },
     }
 

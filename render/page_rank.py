@@ -133,14 +133,25 @@ def _dim(v, full, note="") -> str:
                            ('<div class="dnote">%s</div>' % note) if note else "")
 
 
-def _sec_composite(data, sc) -> str:
-    """综合分 TOP12 —— 四维加权（趋势 35 + 概念 25 + 原因 20 + 资金 20）。
+def _drive_tag(r) -> str:
+    """驱动类型标签：双轮 / 行业 / 概念 / 无。
 
-    为什么是 12 而不是 10：新模型把「排名攀升」放在第一权重，
-    而这类票经常是"趋势极强但资金盘子小"，正好卡在 10~12 名之间
-    （实测 002088 鲁阳节能：5 日从 1572 名冲到 29 名，趋势分全榜第 7，
-    但成交额只有 1.27 亿 → 资金分 7.1，总分 64.5 排第 11）。
-    只取 10 条会恰好把这些票全部切掉，等于模型白改。
+    这是「行业＋概念」两个维度分开算之后最直观的产出——
+    同一张榜里一眼能看出这只票是"两条腿"还是"一条腿"。
+    """
+    d = r.get("drive") or "无"
+    if d == "双轮":
+        return '<span class="tag n" style="border-color:#e8804a">双轮</span>'
+    if d == "行业":
+        return '<span class="tag n">行业</span>'
+    if d == "概念":
+        return '<span class="tag n">概念</span>'
+    return '<span class="sub">—</span>'
+
+
+def _sec_composite(data, sc) -> str:
+    """综合分 TOP12 —— 五维加权（趋势 35 + 概念 25 + 原因 20 + 资金 20 + 行业 14
+    ＋ 双轮共振 6，满分 120）。
 
     「10 日排名」列：柱条画最近 10 个交易日，起算点取这 10 天里最差的那天，
     和趋势分（取近 5 步）不是同一个窗口——两处都各自标了窗口天数，
@@ -152,6 +163,7 @@ def _sec_composite(data, sc) -> str:
         code = x["code"]
         e = stocks.get(code) or {}
         tr = x.get("trend_detail") or {}
+        ind = x.get("industry") or {}
         hist = (e.get("tdx") or {}).get("hist") or []
         seq10 = [h["rank"] for h in hist if h.get("rank")][-RANK_DAYS:]
         trace = ""
@@ -175,10 +187,17 @@ def _sec_composite(data, sc) -> str:
         md = x.get("money_detail") or {}
         mnote = ("%.2f 亿 · 分位 %.0f%%" % (md["amt_yi"], md["amt_pct"] * 100)
                  if md.get("amt_yi") is not None else md.get("note", "—"))
+        # 行业格：行业名 + 涨幅，细条是它在全市场行业里的涨幅分位
+        if ind.get("name"):
+            inote = ("%s %s%% · 分位 %.0f%%" % (ind["name"], signed(ind.get("pct"), 2),
+                                               (ind.get("pct_rank") or 0) * 100))
+        else:
+            inote = ind.get("note") or "无行业数据"
         pct = e.get("pct")
-        rows.append("<tr>%s%s%s%s%s%s%s%s%s%s</tr>" % (
+        rows.append("<tr>%s%s%s%s%s%s%s%s%s%s%s%s</tr>" % (
             td(_rk(x["rank"])),
             td(_link(code, x.get("name")), left=True),
+            td(_drive_tag(x)),
             td("¥%.2f" % float(e["price"]) if e.get("price") is not None else "—"),
             td(_pct(pct)),
             td('<b class="big">%s</b>' % trim(x["total"], 1)),
@@ -186,17 +205,18 @@ def _sec_composite(data, sc) -> str:
                     ("%.2f/日" % tr["slope"]) if tr.get("slope") is not None else "代理"),
                left=True),
             td(_dim(x["concept"], 25, cnotes), left=True),
+            td(_dim(x["ind"], (sc.get("meta") or {}).get("ind_full") or 14, inote), left=True),
             td(_dim(x["reason"], 20, rnote), left=True),
             td(_dim(x["money"], 20, mnote), left=True),
             td(trace, left=True),
         ))
-    body = table(["#", "股票", "价格", "涨幅", "综合分", "趋势 /35", "概念 /25",
-                  "原因 /20", "资金 /20", "10 日排名"],
-                 "".join(rows), "l r r r r l l l l l")
+    body = table(["#", "股票", "驱动", "价格", "涨幅", "综合分", "趋势 /35", "概念 /25",
+                  "行业 /14", "原因 /20", "资金 /20", "10 日排名"],
+                 "".join(rows), "l l l r r r l l l l l l")
     meta = sc.get("meta") or {}
-    return card("综合分 TOP12<span>排名趋势 35 + 概念趋势 25 + 上榜原因 20 + 资金 20"
-                "　·　%d 只有排名历史 / 共 %d 只</span>"
-                % (meta.get("n_with_hist", 0), meta.get("n", 0)), body)
+    return card("综合分 TOP12<span>趋势 35 + 概念 25 + 原因 20 + 资金 20 + 行业 14 ＋ 双轮共振 6"
+                "　·　%d 只有排名历史 / 共 %d 只　·　双轮 %d 只</span>"
+                % (meta.get("n_with_hist", 0), meta.get("n", 0), meta.get("n_double", 0)), body)
 
 
 def _hot_cell(x) -> str:
@@ -338,11 +358,19 @@ def _note_score() -> str:
     """综合榜口径（原来和人气榜共用一个 3000 字的说明卡，两栏都读得费劲）。"""
     return card("口径说明", (
         '<div class="dv-detail">'
-        "<b>综合分</b>是本机自算的四维加权，满分 100："
+        "<b>综合分</b>是本机自算的五维加权，满分 120："
         "<b>排名趋势 35</b>（日均对数改善 14 + 连续上升占比 11 + 当前名次 10）"
         "＋<b>概念趋势 25</b>（所属概念中正在上升的强度，标签成分少于 3 只不计）"
         "＋<b>上榜原因 20</b>（当日异动里的硬逻辑项数：产能/订单/净利/研报…）"
-        "＋<b>资金 20</b>（成交额分位 12 + 涨幅 6 + 换手率 2）。<br>"
+        "＋<b>资金 20</b>（成交额分位 12 + 涨幅 6 + 换手率 2）"
+        "＋<b>行业 14</b>（行业指数涨幅分位 7 + 上涨广度 4 + 主力净额 3），"
+        "再加<b>双轮共振 6</b>——行业在加速、概念同时热，两条腿都硬才给。<br>"
+        "前四项合计 100 分是原口径<b>一分未改</b>（页面上仍存为基准分），"
+        "行业与共振是加在后面的两笔：老分数照样能和历史结论对照，"
+        "新维度只让「行业也在动」的票浮上来，不推翻整张榜。<br>"
+        "<b>驱动</b>列：<b>双轮</b>＝行业热×概念热（+6）；<b>行业</b>＝只有行业在动；"
+        "<b>概念</b>＝只有题材在热；<b>—</b>＝两边都不热。单边不给共振分是刻意的——"
+        "给了等于给所有概念热票普涨一次，榜单会通胀，反而看不出双轮的稀缺。<br>"
         "「趋势」用对数名次差算速度——1900 名到 600 名与 60 名到 20 名在信息量上不可比，"
         "取对数才公平；「稳」看 5 步里有几步在降，来回震荡只得一半分。<br>"
         "<b>10 日排名</b>画最近 10 个交易日的名次柱（柱高=名次，越前越高），"
@@ -352,8 +380,8 @@ def _note_score() -> str:
         "算进去等于给大盘加分。<br>"
         "只有 tdx 榜上的票有 30 天名次序列，其余票用热度日环比代理，"
         "且最高只给 21 分（35×0.6）——单点环比证明不了连续上升。<br>"
-        "点任意股票进详情页，能看到完整的四维评分拆解、全部概念与排名轨迹。"
-        "</div>"), "四维综合分 · 满分 100")
+        "点任意股票进详情页，能看到完整的五维评分拆解、全部概念与排名轨迹。"
+        "</div>"), "五维综合分 · 满分 120（原四维 100 未改）")
 
 
 def _note_hot() -> str:

@@ -62,6 +62,10 @@ h2 span{font-size:12px;color:var(--muted);font-weight:400}
 .fill{height:100%;border-radius:6px}
 .bval{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
 .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+/* 并排两栏：行业页把"只有行业 / 只有概念"放一起对照，单腿形态一眼可比 */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+.cols>.card{margin-bottom:10px}
+@media(max-width:900px){.cols{grid-template-columns:1fr}}
 .cell{background:var(--soft2);border:1px solid var(--line);border-radius:10px;padding:12px}
 .cell .k{font-size:11.5px;color:var(--muted)}
 .cell .v{font-size:20px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}

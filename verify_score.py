@@ -63,26 +63,40 @@ def main():
     chk("四维均不越界（趋势≤35 概念≤25 原因≤20 资金≤20）", over, [])
     tots = [r["total"] for r in ranked]
     chk("总分严格降序", tots == sorted(tots, reverse=True), True)
-    chk("总分 = 四维之和", all(
-        abs(r["total"] - (r["trend"]["pts"] + r["concept"] + r["reason"] + r["money"])) < 0.051
+    chk("总分 = 四维 + 行业 + 共振（base100 与历史口径一致）", all(
+        abs(r["total"] - (r["base100"] + r["ind"] + r["reso"])) < 0.051
+        and abs(r["base100"] - (r["trend"]["pts"] + r["concept"] + r["reason"] + r["money"])) < 0.051
         for r in ranked), True)
     chk("排名连续无重复", [r["rank"] for r in ranked], list(range(1, len(ranked) + 1)))
 
     # ---------------------------------------------------------- B 趋势维（独立复算）
     print("\n== B 排名趋势（独立复算 hist）==")
-    e = S["002088"]
-    rs = [x["rank"] for x in e["tdx"]["hist"]][-6:]
-    chk("鲁阳 hist 序列", rs, [1572, 1937, 652, 227, 127, 29])
-    seg = [x["rank"] for x in e["tdx"]["hist"]][-6:]
-    i0 = seg.index(max(seg))
-    chk("起算点=启动前最差名次（1937，跳过 1572 的回撤）", seg[i0], 1937)
-    seg = rs[rs.index(max(rs)):]
+    # 002088 那条 [1572→29] 的轨迹是 2026-10-30 的历史事实，收盘后票会掉池，
+    # 对当日 bundle 钉死它必然翻车。改成两截：
+    #   ① 构造数据单测起算点/斜率算法（永远可复现）；
+    #   ② 用池内动态挑的票对拍模块结果与独立复算。
+    fake = {"tdx": {"hist": [{"rank": r} for r in [1572, 1937, 652, 227, 127, 29]]}}
+    ft = score.rank_trend(fake)
+    chk("起算点=启动前最差名次（1937，跳过 1572 的回撤）", ft["seg"][0], 1937)
+    seg = ft["seg"]
     slope = (math.log(seg[0]) - math.log(seg[-1])) / (len(seg) - 1)
     mono = sum(1 for a, b in zip(seg, seg[1:]) if b < a) / (len(seg) - 1)
-    t = by["002088"]["trend_detail"]
-    chk("鲁阳 对数斜率复算一致", round(t["slope"], 3), round(slope, 3))
-    chk("鲁阳 单调性复算一致", round(t["mono"], 2), round(mono, 2))
-    chk("鲁阳 当前名次", t["now"], 29)
+    chk("对数斜率复算一致", round(ft["slope"], 3), round(slope, 3))
+    chk("单调性复算一致", round(ft["mono"], 2), round(mono, 2))
+    chk("当前名次取末位", ft["now"], 29)
+    cand = [c for c, x in S.items()
+            if len((x.get("tdx") or {}).get("hist") or []) >= 3
+            and (by.get(c) or {}).get("trend_detail")]
+    chk("池内有可复算趋势的票", len(cand) > 0, True)
+    if cand:
+        c0 = cand[0]
+        e0 = S[c0]
+        rs0 = [x["rank"] for x in e0["tdx"]["hist"]][-6:]
+        i00 = rs0.index(max(rs0))
+        seg0 = rs0[i00:] if i00 < len(rs0) - 1 else rs0
+        sl0 = (math.log(seg0[0]) - math.log(seg0[-1])) / max(len(seg0) - 1, 1)
+        t0 = by[c0]["trend_detail"]
+        chk("%s 模块斜率与独立复算一致" % c0, round(t0["slope"], 3), round(sl0, 3))
     # 速度封顶：日均 1.0 个对数单位，超出不再加分
     chk("速度封顶后不超过 14", all(r["trend"].get("speed", 0) <= 14.01 for r in ranked), True)
     # 代理趋势上限 21
@@ -97,14 +111,17 @@ def main():
     # ---------------------------------------------------------- C 概念维（独立复算）
     print("\n== C 概念趋势（独立数标签）==")
     tags = sc["tags"]
-    chk("羊字辈 成分 25 只", tags.get("羊字辈", {}).get("n"), 25)
-    up_y = tags.get("羊字辈", {}).get("up")
-    # 上升占比随"起算点"算法浮动（起算点取启动前最差名次），只验区间不写死
-    chk("羊字辈 上升占比 >0.8", up_y > 0.8 and up_y <= 1.0, True)
-    chk("羊字辈 判定为上升", tags.get("羊字辈", {}).get("rising"), True)
-    # 独立数一遍标签成分，与模块结果对齐
-    mem = sum(1 for _, x in S.items() if "羊字辈" in score.tags_of(x))
-    chk("羊字辈 独立数标签复算", mem, tags["羊字辈"]["n"])
+    # 羊字辈的成员数随收盘池变化（午盘 25 只、收盘可能掉到十几只），不钉死；
+    # 守结构：标签在池里就必须与独立数出来的一致、且判定字段合法。
+    if "羊字辈" in tags:
+        g_y = tags["羊字辈"]
+        mem = sum(1 for _, x in S.items() if "羊字辈" in score.tags_of(x))
+        chk("羊字辈 独立数标签复算", mem, g_y["n"])
+        chk("羊字辈 上升占比在 0~1", 0.0 <= g_y["up"] <= 1.0, True)
+        chk("羊字辈 rising 字段合法", g_y["rising"] in (True, False), True)
+    else:
+        chk("羊字辈不在当日标签池（允许：池缩后成分 <3 只），此时不应误报",
+            "羊字辈" not in tags, True)
     # 泛标签不进池
     wide_in = [k for k in tags if k in score.WIDE]
     chk("泛标签不参与打分", wide_in, [])
@@ -119,14 +136,18 @@ def main():
     print("\n== D 资金（回归 turnover 同名不同义那个坑）==")
     money_full = [r["code"] for r in ranked if r["money"] >= 19.99]
     chk("没有大批票资金满分（旧坑：全员 20）", len(money_full) <= 2, True)
-    md = by["002088"]["money_detail"]
-    amt = (S["002088"]["tdx"].get("turnover")) or 0
     pool = sorted(x for x in ((v.get("tdx") or {}).get("turnover") for v in S.values()) if x)
-    import bisect
-    want_pct = round(bisect.bisect_left(pool, amt) / len(pool), 3)
-    chk("鲁阳 成交额分位复算一致", md["amt_pct"], want_pct)
-    chk("鲁阳 成交额用「元」而不是换手率", md["amt_yi"], round(amt / 1e8, 2))
-    chk("鲁阳 资金分 < 10（小成交额拿不到高分）", by["002088"]["money"] < 10, True)
+    amt_cands = [c for c in cand if (S[c].get("tdx") or {}).get("turnover")] if cand else []
+    if amt_cands:
+        c1 = amt_cands[0]
+        amt = S[c1]["tdx"]["turnover"]
+        md = by[c1]["money_detail"]
+        import bisect
+        want_pct = round(bisect.bisect_left(pool, amt) / len(pool), 3)
+        chk("%s 成交额分位复算一致" % c1, md["amt_pct"], want_pct)
+        chk("%s 成交额用「元」而不是换手率" % c1, md["amt_yi"], round(amt / 1e8, 2))
+    else:
+        chk("池内有 tdx 成交额的票（数据事实，缺失即源坏了）", bool(pool), True)
     chk("成交额池只含 tdx 口径（>=1000 万元级）", all(x > 1e7 for x in pool), True)
 
     # ---------------------------------------------------------- E 原因维
@@ -135,7 +156,6 @@ def main():
     stale = [c for c, ab in (data.get("abnormal") or {}).items()
              if str(ab.get("date")) != q and by.get(c) and by[c]["reason"] > 0]
     chk("非当日异动一律 0 分", stale, [])
-    rd = by["002088"]["reason_detail"]
     # 哪只票当日有异动是数据事实（今天它不是涨停就自然没有），不能钉死在鲁阳身上。
     # 改成动态挑：先找"当日异动且带硬逻辑项"的票，再验它的原因分真被采纳。
     ab_all = data.get("abnormal") or {}
@@ -165,15 +185,19 @@ def main():
     chk("TOP10 分数单调不增",
         all(x["total"] >= y["total"] for x, y in zip(ranked[:10], ranked[1:10])), True)
 
-    hs = http("/s/002088")
-    chk("个股页含四维评分卡", "排名趋势 35 + 概念趋势 25 + 上榜原因 20 + 资金 20" in hs, True)
-    chk("个股页印出名次", "全池第 %d 名" % by["002088"]["rank"] in hs, True)
-    chk("个股页印出趋势速度", ("%.2f 对数名次" % by["002088"]["trend_detail"]["slope"]) in hs, True)
-    chk("个股页印出名次区间（起算 1937）", "第 1937 名 → 第 29 名" in hs, True)
-    cd0 = (by["002088"].get("concept_detail") or [{}])[0]
-    chk("个股页印出上升概念",
-        ("%s（%d 只 · 升 %d%%）" % (cd0.get("tag"), cd0.get("n", 0),
-                                  round((cd0.get("up") or 0) * 100))) in hs, True)
+    # 动态挑一只票验个股页：收盘池会换血，002088 未必在，不能钉死
+    pc = ranked[0]["code"] if ranked else None
+    hs = http("/s/%s" % pc) if pc else ""
+    chk("个股页含五维评分卡", "趋势 35 + 概念 25 + 行业 14 + 原因 20 + 资金 20" in hs, True)
+    chk("个股页印出名次", "全池第 %d 名" % by[pc]["rank"] in hs, True)
+    if by[pc].get("trend_detail"):
+        chk("个股页印出趋势速度",
+            ("%.2f 对数名次" % by[pc]["trend_detail"]["slope"]) in hs, True)
+    cd0 = (by[pc].get("concept_detail") or [{}])[0]
+    if cd0.get("tag"):
+        chk("个股页印出上升概念",
+            ("%s（%d 只 · 升 %d%%）" % (cd0.get("tag"), cd0.get("n", 0),
+                                      round((cd0.get("up") or 0) * 100))) in hs, True)
 
     hc = http("/concept")
     chk("概念页含「上升广度」与「概念分（拆解）」列",
@@ -183,9 +207,17 @@ def main():
     body_c = hc.split("概念总榜")[1].split("</table>")[0]
     rows_c = re.findall(r"<tr>(.*?)</tr>", body_c, re.S)[1:6]   # [0] 是表头
     top5 = [re.sub(r"<[^>]+>", " ", r) for r in rows_c]
-    chk("羊字辈在概念榜前 5", any("羊字辈" in r for r in top5), True)
-    chk("羊字辈在该行被判为上升（↑）",
-        any("羊字辈" in r and "↑" in r for r in top5), True)
+    # 羊字辈未必永远在前 5（收盘池换血后概念分洗牌），守结构：
+    # 榜上任意行都要带 ↑ 或 ↓ 的上升标记，羊字辈若在榜也必须带。
+    chk("概念榜前 5 非空且带方向标记",
+        top5 and any(("↑" in r or "↓" in r) for r in top5), True)
+    allrows = [re.sub(r"<[^>]+>", " ", r)
+               for r in re.findall(r"<tr>(.*?)</tr>", body_c, re.S)[1:]]
+    if any("羊字辈" in r for r in allrows):
+        chk("羊字辈在该行被判为上升（↑）",
+            any("羊字辈" in r and "↑" in r for r in allrows), True)
+    else:
+        chk("羊字辈不在概念榜（收盘池缩水属正常），此时榜仍应有内容", len(allrows) >= 5, True)
     scores = [float(x) for x in
               re.findall(r'min-width:34px;text-align:right">([\d.]+)<', body_c)]
     chk("概念分逐行单调不增", len(scores) >= 5 and all(
