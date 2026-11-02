@@ -42,6 +42,10 @@ h2 span{font-size:12px;color:var(--muted);font-weight:400}
 .fill{height:100%;border-radius:6px}
 .bval{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
 .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+/* 并排两栏：行业页把"只有行业 / 只有概念"放一起对照，单腿形态一眼可比 */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:start}
+.cols>.card{margin-bottom:10px}
+@media(max-width:900px){.cols{grid-template-columns:1fr}}
 .cell{background:var(--soft2);border:1px solid var(--line);border-radius:10px;padding:12px}
 .cell .k{font-size:11.5px;color:var(--muted)}
 .cell .v{font-size:20px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}
@@ -224,7 +228,7 @@ td b.big{font-size:17px;font-variant-numeric:tabular-nums}
 .tp.on{display:block}
 .tp>.card:last-child{margin-bottom:0}
 @media(max-width:640px){.tabs2{gap:4px}.tabs2 a{padding:6px 10px;font-size:12.5px}}
-</style></head><body><nav class="nav"><div class="navin"><a class="brand" href="../../">A 股全景<i>本地 · 数据真值</i></a><div class="tabs"><a href="../../">复盘</a><a class="on" href="../../rank/">榜单</a><a href="../../concept/">题材</a><a href="../../drivers/">驱动词</a><a href="../../attr/">归因</a><a href="../../brief/">简报</a></div><button class="tmode" id="tmode" type="button" onclick="wbToggleTheme()" title="切换 深色 / 浅色 主题">◐</button></div></nav><div class="wrap"><div class="hero"><div class="eyebrow">个股详情</div><h1>没这只票的数据</h1><div class="meta">代码 300892 不在今日合并数据里。合并范围＝人气榜 148 只 + tdx 榜单 43 只 + 同花顺热榜 200 只，未覆盖全市场 5000 只。</div></div><div class="card"><h2>换个入口</h2><div class="search"><form method="get" action="../../rank/"><input name="q" value="300892" placeholder="输入代码或中文名"><button type="submit">搜索</button></form></div><div class="warn">想看全市场的任意个股，需要另接一份行情源（P4 待定），当前版本不假装能查所有票。</div></div></div><script>(function(){
+</style></head><body><nav class="nav"><div class="navin"><a class="brand" href="../../">A 股全景<i>本地 · 数据真值</i></a><div class="tabs"><a href="../../">复盘</a><a class="on" href="../../rank/">榜单</a><a href="../../industry/">行业</a><a href="../../concept/">题材</a><a href="../../drivers/">驱动词</a><a href="../../attr/">归因</a><a href="../../brief/">简报</a></div><button class="tmode" id="tmode" type="button" onclick="wbToggleTheme()" title="切换 深色 / 浅色 主题">◐</button></div></nav><div class="wrap"><div class="hero"><div class="eyebrow">个股详情</div><h1>没这只票的数据</h1><div class="meta">代码 300892 不在今日合并数据里。合并范围＝人气榜 148 只 + tdx 榜单 43 只 + 同花顺热榜 200 只，未覆盖全市场 5000 只。</div></div><div class="card"><h2>换个入口</h2><div class="search"><form method="get" action="../../rank/"><input name="q" value="300892" placeholder="输入代码或中文名"><button type="submit">搜索</button></form></div><div class="warn">想看全市场的任意个股，需要另接一份行情源（P4 待定），当前版本不假装能查所有票。</div></div></div><script>(function(){
 function act(box,k){
   var i, ls=box.querySelectorAll('.tabs2 a');
   if(!ls.length)return;
