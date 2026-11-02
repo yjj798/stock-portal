@@ -238,13 +238,69 @@ class H(BaseHTTPRequestHandler):
 
 
 def main():
-    host = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
-    port = int(sys.argv[2]) if len(sys.argv) > 2 else 888
+    host = os.environ.get("HOST") or (sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1")
+    port = int(os.environ.get("PORT") or (sys.argv[2] if len(sys.argv) > 2 else 888))
+    if os.environ.get("AUTO_REFRESH", "1") != "0":
+        start_refresh_daemon()
     ds = store.snapshot_dates()
     print("stock-portal  http://%s:%d" % (host, port))
     print("  数据目录 %s（%d 个快照，最新 %s）"
           % (store.SNAP_DIR, len(ds), ds[-1] if ds else "无"))
     ThreadingHTTPServer((host, port), H).serve_forever()
+
+
+# ---------------------------------------------------------------- 云端自动刷新
+# 托管沙箱里没有 cron，用进程内线程顶替计划任务：每个交易日收盘后（15:10）与
+# 晚间源更新后（21:40）各跑一轮 snapshot_job + refresh --allow-partial。
+# 失败只打日志，不影响服务；下一轮再试。数据写 data/，页面请求期只读，不互斥。
+import threading  # noqa: E402
+import subprocess  # noqa: E402
+import time as _time  # noqa: E402
+from datetime import datetime  # noqa: E402
+
+_DAEMON_DONE: set = set()
+
+
+def _is_trading_day() -> bool:
+    """粗判：周一~周五。节假日会空跑一轮——源不更新，失败留 degraded，无害。"""
+    return datetime.now().weekday() < 5
+
+
+def _refresh_once(label: str) -> None:
+    print("[daemon] %s 开始刷新" % label, flush=True)
+    for cmd, name in (([sys.executable, "snapshot_job.py"], "snapshot"),
+                      ([sys.executable, "refresh.py", "--allow-partial"], "refresh")):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+            tail = (r.stdout or "").strip().splitlines()[-3:]
+            print("[daemon] %s exit=%s %s" % (name, r.returncode, " | ".join(tail)),
+                  flush=True)
+        except Exception as e:
+            print("[daemon] %s 异常：%s" % (name, e), flush=True)
+
+
+def _daemon_loop():
+    while True:
+        now = datetime.now()
+        if _is_trading_day():
+            for slot, hh, mm in (("close", 15, 10), ("night", 21, 40)):
+                key = "%s-%s" % (now.strftime("%Y%m%d"), slot)
+                if key not in _DAEMON_DONE and now.hour == hh and now.minute >= mm:
+                    _DAEMON_DONE.add(key)
+                    threading.Thread(target=_refresh_once, args=(slot,),
+                                     daemon=True).start()
+        _time.sleep(30)
+
+
+def start_refresh_daemon():
+    threading.Thread(target=_daemon_loop, daemon=True).start()
+    print("[daemon] 自动刷新已启动：交易日 15:10 / 21:40 各一轮", flush=True)
+    # 启动时若数据陈旧（最新快照不是今天且现在已过 15:00），先补一轮
+    ds = store.snapshot_dates()
+    today = datetime.now().strftime("%Y-%m-%d")
+    if ds and ds[-1] != today and datetime.now().hour >= 15:
+        threading.Thread(target=_refresh_once, args=("boot-catchup",),
+                         daemon=True).start()
 
 
 if __name__ == "__main__":
