@@ -228,7 +228,86 @@ td b.big{font-size:17px;font-variant-numeric:tabular-nums}
 .tp.on{display:block}
 .tp>.card:last-child{margin-bottom:0}
 @media(max-width:640px){.tabs2{gap:4px}.tabs2 a{padding:6px 10px;font-size:12.5px}}
-</style></head><body><nav class="nav"><div class="navin"><a class="brand" href="../../">A 股全景<i>本地 · 数据真值</i></a><div class="tabs"><a href="../../">复盘</a><a href="../../theme/">主线</a><a href="../../rank/">榜单</a><a href="../../industry/">行业</a><a href="../../concept/">题材</a><a href="../../drivers/">驱动词</a><a class="on" href="../../attr/">归因</a><a href="../../brief/">简报</a></div><button class="tmode" id="tmode" type="button" onclick="wbToggleTheme()" title="切换 深色 / 浅色 主题">◐</button></div></nav><div class="wrap"><div class="hero"><div class="eyebrow">个股详情</div><div class="hd"><h1>青岛双星</h1><span class="c">000599</span><span class="tag n">涨停</span></div><div class="hd" style="margin-top:10px"><span class="big red">¥4.09</span><span class="big red" style="font-size:19px">+9.95%</span></div><div class="ln">¥4.09</div></div><div class="card"><div class="grid4"><div class="cell"><div class="k">连板高度</div><div class="v">首板</div><div class="n">东财涨停池</div></div><div class="cell"><div class="k">封单额</div><div class="v">3007 万</div><div class="n">收盘封单</div></div><div class="cell"><div class="k">成交额</div><div class="v">1.11 亿</div><div class="n">当日</div></div><div class="cell"><div class="k">换手率</div><div class="v">3.51%</div><div class="n">当日</div></div></div></div><div class="card"><h2>上榜原因<span>同花顺个股异动 · <span class="tag n">涨停</span> 2026-11-02</span></h2><div class="rs-b"><div class="rs-t">行业原因</div><div class="rs-x">1、据2026年5月11日互动易，公司以发行股份及支付现金购买资产方式间接持有锦湖轮胎45%股份并控股，4月14日完成重组新股发行；据2026年9月10日互动易，2026年上半年完成重组及配套募资，实现营收138.3亿元、利润总额11.4亿元。
+/* ---- 栏目扩容 + 会员入口（2026-11-02）：导航从 8 栏到 9 栏，手机放不下就横向滚，
+   不再折行——折行会把 sticky 导航撑成两行，遮住正文。 ---- */
+.tabs{overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+.tabs::-webkit-scrollbar{display:none}
+.nauth{display:flex;align-items:center;gap:4px;margin-left:8px;padding-left:10px;
+  border-left:1px solid var(--line);white-space:nowrap}
+.nauth a{font-size:12.5px;color:var(--muted);text-decoration:none;padding:5px 10px;border-radius:8px}
+.nauth a:hover{color:var(--ink);background:var(--hover)}
+.nauth a.cta{background:var(--acc);color:#fff;font-weight:600}
+.nauth a.cta:hover{background:var(--acc);filter:brightness(1.08)}
+.nauth a.me{color:var(--ink);font-weight:600;max-width:110px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:820px){.nauth{padding-left:6px}.nauth a{padding:5px 7px}}
+/* 手机上有 9 个栏目，横滚是必然的。加一道右边缘渐隐当"还能往右划"的提示，
+   否则最后几栏看起来像被裁掉了。 */
+@media(max-width:820px){
+  .tabs{-webkit-mask-image:linear-gradient(90deg,#000 0,#000 86%,transparent 100%);
+        mask-image:linear-gradient(90deg,#000 0,#000 86%,transparent 100%)}
+}
+
+/* ---- 通用按钮 ---- */
+.btn{display:inline-block;font-size:13.5px;font-weight:600;line-height:1.4;padding:9px 18px;
+  border-radius:10px;text-decoration:none;border:1px solid transparent;cursor:pointer;
+  font-family:inherit;-webkit-appearance:none}
+.btn.p{background:var(--acc);color:#fff}
+.btn.p:hover{filter:brightness(1.08)}
+.btn.g{background:var(--card);color:var(--ink);border-color:var(--line)}
+.btn.g:hover{background:var(--hover)}
+.btn.d{background:var(--soft);color:var(--up);border-color:var(--line)}
+.btn[disabled]{opacity:.5;cursor:default;filter:none}
+.btn.sm{font-size:12.5px;padding:5px 12px;border-radius:8px}
+/* ---- 表单 ---- */
+.form{display:grid;gap:12px;max-width:420px}
+.fld{display:grid;gap:5px}
+.fld label{font-size:12px;color:var(--t2);font-weight:600}
+.fld .hint{font-size:11.5px;color:var(--muted);font-weight:400}
+.fld input{font:inherit;font-size:14px;padding:9px 12px;border-radius:9px;
+  border:1px solid var(--line);background:var(--card);color:var(--ink);width:100%}
+.fld input:focus{outline:none;border-color:var(--srchb);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 14%,transparent)}
+.fld input::placeholder{color:var(--muted);opacity:.75}
+.fmsg{font-size:12.5px;padding:9px 12px;border-radius:9px;line-height:1.6}
+.fmsg.err{background:var(--tagNbg);color:var(--tagNck)}
+.fmsg.ok{background:var(--tagbg);color:var(--tagck)}
+.fmsg.note{background:var(--warnbg);border:1px solid var(--warnln);color:var(--t3)}
+.authwrap{max-width:520px;margin:24px auto}
+.authtip{font-size:12.5px;color:var(--muted);margin-top:14px;line-height:1.75}
+/* ---- 首页（landing）---- */
+.lhero{background:var(--card);border:1px solid var(--line);border-radius:16px;
+  padding:44px 34px 38px;margin:10px 0 16px;position:relative;overflow:hidden}
+.lhero::before{content:"";position:absolute;left:0;right:0;top:0;height:4px;
+  background:linear-gradient(90deg,var(--up) 0%,#e8804a 38%,#c9a227 62%,var(--acc) 100%)}
+.lhero h1{font-size:32px;line-height:1.28;margin:10px 0 12px;letter-spacing:-.02em;max-width:19em}
+.lhero p{font-size:15px;color:var(--t2);line-height:1.85;max-width:44em;margin:0 0 8px}
+.lhero .cta{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:22px}
+.lhero .tiny{font-size:12px;color:var(--muted);margin:0}
+.lgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media(max-width:900px){.lgrid{grid-template-columns:1fr 1fr}}
+@media(max-width:600px){.lgrid{grid-template-columns:1fr}.lhero{padding:30px 20px}h1{font-size:24px}}
+.lcard{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.lcard .n{font-size:11px;color:var(--muted);letter-spacing:.1em}
+.lcard h3{font-size:14.5px;margin:5px 0 7px;font-weight:700}
+.lcard p{font-size:12.5px;color:var(--t2);line-height:1.75;margin:0}
+.lcard a{font-size:12.5px;color:var(--acc);text-decoration:none;display:inline-block;margin-top:9px}
+.lcard a:hover{text-decoration:underline}
+.lcard.off a{color:var(--muted)}
+.steps{display:grid;gap:12px;counter-reset:s}
+.step{display:grid;grid-template-columns:30px 1fr;gap:12px;align-items:start;
+  padding:12px 0;border-top:1px solid var(--line)}
+.step:first-child{border-top:0;padding-top:0}
+.step .i{width:26px;height:26px;border-radius:50%;background:var(--soft);color:var(--t2);
+  font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.step b{font-size:13.5px}
+.step p{font-size:12.5px;color:var(--t2);line-height:1.75;margin:3px 0 0}
+.kv{display:grid;grid-template-columns:88px 1fr;gap:6px 14px;font-size:13px}
+.kv .k{color:var(--muted);font-size:12.5px}
+.kv .v{color:var(--ink);word-break:break-all}
+.foot-note{font-size:11.5px;color:var(--foot);line-height:1.9;margin-top:8px}
+}
+</style></head><body><nav class="nav"><div class="navin"><a class="brand" href="../../">A 股全景<i>本地 · 数据真值</i></a><div class="tabs"><a href="../../">首页</a><a href="../../board/">总览</a><a href="../../theme/">主线</a><a href="../../rank/">榜单</a><a href="../../industry/">行业</a><a href="../../concept/">题材</a><a href="../../drivers/">驱动词</a><a class="on" href="../../attr/">归因</a><a href="../../brief/">简报</a></div><div class="nauth"><a href="https://t.legaga.top/login">登录</a><a class="cta" href="https://t.legaga.top/register">免费注册</a></div><button class="tmode" id="tmode" type="button" onclick="wbToggleTheme()" title="切换 深色 / 浅色 主题">◐</button></div></nav><div class="wrap"><div class="hero"><div class="eyebrow">个股详情</div><div class="hd"><h1>青岛双星</h1><span class="c">000599</span><span class="tag n">涨停</span></div><div class="hd" style="margin-top:10px"><span class="big red">¥4.09</span><span class="big red" style="font-size:19px">+9.95%</span></div><div class="ln">¥4.09</div></div><div class="card"><div class="grid4"><div class="cell"><div class="k">连板高度</div><div class="v">首板</div><div class="n">东财涨停池</div></div><div class="cell"><div class="k">封单额</div><div class="v">3007 万</div><div class="n">收盘封单</div></div><div class="cell"><div class="k">成交额</div><div class="v">1.11 亿</div><div class="n">当日</div></div><div class="cell"><div class="k">换手率</div><div class="v">3.51%</div><div class="n">当日</div></div></div></div><div class="card"><h2>上榜原因<span>同花顺个股异动 · <span class="tag n">涨停</span> 2026-11-02</span></h2><div class="rs-b"><div class="rs-t">行业原因</div><div class="rs-x">1、据2026年5月11日互动易，公司以发行股份及支付现金购买资产方式间接持有锦湖轮胎45%股份并控股，4月14日完成重组新股发行；据2026年9月10日互动易，2026年上半年完成重组及配套募资，实现营收138.3亿元、利润总额11.4亿元。
 2、据2026年5月8日业绩说明会，公司在中国、韩国、越南、柬埔寨、美国均设有工厂，全球共11个生产基地；子公司锦湖轮胎拟在欧洲建设乘用车胎600万条/年产能。
 3、据2026年4月29日年报，公司控股股东为双星集团有限责任公司，实际控制人为青岛市人民政府国有资产监督管理委员会。</div></div><div class="kv" style="margin:12px 0 6px"><div><span>关键词（同花顺给这只票打的词，括号里是全市场共享只数）</span><b><a class="sl" href="../../theme/">看今日关键词榜</a></b></div></div><div class="tags"><a class="chip" href="../../theme/">轮胎 <span class="sub">1 只 · 涨停 1</span></a><a class="chip" href="../../theme/">锦湖并表 <span class="sub">1 只 · 涨停 1</span></a><a class="chip" href="../../theme/">并购重组 <span class="sub">3 只 · 涨停 3</span></a><a class="chip" href="../../theme/">青岛国资 <span class="sub">1 只 · 涨停 1</span></a></div><div class="sub" style="margin-top:10px">（免责声明：本内容由AI技术搜集公开信息总结生成，仅供参考，不构成投资建议，以上市公司公告为准）</div></div><div class="card"><h2>龙虎榜<span>近 30 天 · 同花顺个股上榜 + 东财明细</span></h2><div class="empty">近 30 天没上过龙虎榜。上榜是交易所按「涨幅偏离 7%/换手 20%/振幅 15%」等条件触发的公开披露，没触发就没有数据——这不等于没有资金，只是没有公开席位。</div></div><div class="card"><h2>为什么这页没有评分</h2><div class="dv-detail">这只票今天涨停，但不在人气池（同花顺热度榜 141 只）里，所以没有人气名次与热度趋势——四维评分算不出来，这里不填 0 分冒充。它仍然被计入<b>主线热度</b>与<b>消息面关键词榜</b>（全市场涨停口径），点顶部「主线」看它挂在哪条线上。</div></div></div><footer>数据来源：东财涨停池 · 同花顺逐股异动<br>本页为轻量页：无评分，仅行情与原因。</footer><script>(function(){
 function act(box,k){
