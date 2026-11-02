@@ -35,6 +35,10 @@ EXPLAIN = """<div class="dv-detail">
 <b>入榜只数 ≠ 概念总规模</b>：分母只统计当日抓到人气数据的个股（约 167 只）。
 同花顺全市场一个概念动辄几十上百只，本池只看得见「今天有人气的那部分」，
 所以「入榜 14 只」不能读成「这个概念只有 14 只票」。<br>
+<b>「X字辈」按读音收录</b>：这类概念名是谐音梗，源只按关键词收录，名字里同音的票会漏。
+本站对以「字辈」结尾的概念做<b>名称同音补全</b>——「羊」读 yang，那么
+阳/洋/扬/杨（泉阳泉、太平洋、扬子新材、沈阳机床、九阳股份…）都算，补进来的成员
+标「谐」并单独列出只数，与源成员分开看，不用猜。<br>
 <b>泛标签</b>（业绩增长 / 高股息 / 三季报增长 / 超跌反弹等）与
 <b>行情描述型标签</b>（「CPO板块下跌」这类异动原因）不参与概念榜——
 前者指向不具体，后者根本不是概念。<br>
@@ -64,18 +68,23 @@ def _bar(sub, total, width=118):
             % (width, esc(tip), "".join(segs), trim(total, 1)))
 
 
-def _members(codes, stocks, limit=None, leader=""):
+def _members(codes, stocks, limit=None, leader="", hp=()):
     if not codes:
         return '<span class="sub">—</span>'
+    hp = set(hp or ())
     rows = sorted(codes, key=lambda c: (stocks[c].get("heat_rank") or 999))[:limit or len(codes)]
     out = []
     for c in rows:
         e = stocks.get(c) or {}
+        is_hp = c in hp
         cls = "chip lead" if (e.get("name") or "") == leader else "chip"
-        out.append('<a class="%s" href="/s/%s" title="人气第 %s 名">%s'
-                   '<span style="opacity:.5;font-size:10px"> %s</span></a>'
+        style = ' style="border-color:#e8804a"' if is_hp else ""
+        mark = '<span style="opacity:.55;font-size:10px"> 谐</span>' if is_hp else ""
+        out.append('<a class="%s" href="/s/%s" title="人气第 %s 名%s"%s>%s'
+                   '<span style="opacity:.5;font-size:10px"> %s</span>%s</a>'
                    % (cls, esc(c), esc(e.get("heat_rank") or "—"),
-                      esc(e.get("name") or c), esc(e.get("heat_rank") or "—")))
+                      "，同音补入" if is_hp else "", style,
+                      esc(e.get("name") or c), esc(e.get("heat_rank") or "—"), mark))
     more = ""
     if limit and len(codes) > limit:
         more = '<span class="sub">　等 %d 只</span>' % len(codes)
@@ -85,6 +94,7 @@ def _members(codes, stocks, limit=None, leader=""):
 def _detail(r, stocks) -> str:
     """单概念展开：五因子各自打了多少分 + 全部成分。"""
     sub = r["sub"]
+    hp = r.get("homophone") or []
     kv = [
         ("入榜只数", "%d 只" % r["n"]),
         ("涨停 / 最高板", "%d 只 / %d 板" % (r["limit_up"], r["max_board"])),
@@ -97,6 +107,9 @@ def _detail(r, stocks) -> str:
         ("强/弱/净", "%s / %s / %s" % (r["strong"] or "—", r["weak"] or "—", r["net"] or "—")),
         ("概念分", "%s / 100" % trim(r["total"], 1)),
     ]
+    if hp:
+        kv.insert(1, ("谐音补入", "%d 只（读 %s 音，源未收录）"
+                      % (len(hp), r.get("hp_sound") or "—")))
     kvhtml = "".join("<div><span>%s</span><b>%s</b></div>" % (esc(k), esc(v)) for k, v in kv)
     bars = []
     for k in ("lu", "up", "heat", "rise", "lead"):
@@ -110,7 +123,8 @@ def _detail(r, stocks) -> str:
             % (SUB_NAME[k], sub[k] / full * 100, SUB_COLOR[k], trim(sub[k], 1), int(full)))
     body = ('<div class="kv">%s</div><div style="margin-top:14px">%s</div>'
             '<div style="margin-top:14px">%s</div>'
-            % (kvhtml, "".join(bars), _members(r["codes"], stocks)))
+            % (kvhtml, "".join(bars), _members(r["codes"], stocks,
+                                               hp=r.get("homophone") or ())))
     return card("%s<span>概念分 %s · 第 %d 名 · 按人气名次排成分</span>"
                 % (esc(r["concept"]), trim(r["total"], 1), r["rank"]), body, "")
 

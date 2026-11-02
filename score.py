@@ -49,6 +49,8 @@ import collections
 import math
 import re
 
+import pinyin_map
+
 # 泛标签：不指向具体产业逻辑，不参与概念打分（仍会在页面上原样展示）
 #
 # 「三季报扭亏 / 减亏」不在泛标签里，这是 2026-11-02 按用户判断改的口径：
@@ -251,6 +253,21 @@ def concept_board(stocks, snap=None, stats=None) -> list:
         if len(codes) < TAG_MIN:
             continue
 
+        # 「X字辈」是**读音梗**，不是字面梗：源只按关键词收录，名字里同音的票会漏。
+        # 实测「羊字辈」源给 24 只，池内读 yang 的其实 27 只——太平洋、扬子新材、
+        # 鲁阳节能被漏掉，而用户一眼就看出「泉阳泉也是羊」（名字里是"阳"）。
+        # 这里按名称同音补齐，并单独记下补了谁，页面上如实标注来源。
+        hp, hp_sound = [], ""
+        if name.endswith("字辈"):
+            base = name[:-2].strip("“”\"'「」『』 　")
+            pys = pinyin_map.readings(base[:1]) if base else ()
+            if pys:
+                hp_sound = pys[0]
+                hp = [c for c, e in stocks.items()
+                      if c not in codes
+                      and pinyin_map.same_sound(e.get("name") or "", hp_sound)]
+                codes = codes + hp
+
         lu = sum(1 for c in codes if c in boards)
         lu = max(lu, int(st.get("limit_up") or 0))
         mb = max([boards.get(c, 1) for c in codes if c in boards] or [1])
@@ -283,6 +300,7 @@ def concept_board(stocks, snap=None, stats=None) -> list:
             "strong": st.get("strong"), "weak": st.get("weak"), "net": st.get("net"),
             "stat_heat": st.get("heat"), "hchg": st.get("hchg"),
             "in_stats": bool(st),
+            "homophone": hp, "hp_sound": hp_sound,
         })
 
     if not rows:

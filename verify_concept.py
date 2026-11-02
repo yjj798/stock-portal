@@ -71,6 +71,24 @@ def main() -> int:
     chk("羊字辈涨停数 ≥ 8（本月实测 10）", (yz or {}).get("limit_up", 0) >= 8, True)
     chk("羊字辈最高板 ≥ 2", (yz or {}).get("max_board", 0) >= 2, True)
     chk("羊字辈涨停分接近满分（≥25/30）", (yz or {}).get("sub", {}).get("lu", 0) >= 25, True)
+
+    # 用户 2026-11-02 当场指出：「羊字辈」是读音梗，程序按字面只认三只，绝对不对。
+    # 判据不放死具体只数（人气池每天变），只钉"必须认出同音字"这个能力。
+    print("\n== C2 谐音梗按读音收录（羊 → yang）==")
+    hp_codes = set((yz or {}).get("homophone") or [])
+    st = stocks
+    hp_names = [st.get(c, {}).get("name") for c in hp_codes]
+    chk("羊字辈记录了谐音补入名单", isinstance((yz or {}).get("homophone"), list), True)
+    chk("补入只数 ≥ 1", len(hp_codes) >= 1, True)
+    chk("补入的票名字里没有「羊」字（说明是按音不是按字）",
+        all("羊" not in (nm or "") for nm in hp_names), True)
+    chk("补入的票名字里确有 yang 音的字",
+        all(any(ch in (nm or "") for ch in "阳洋扬杨佯烊旸炀") for nm in hp_names), True)
+    chk("补入后成员数 = 源成员数 + 补入数",
+        (yz or {}).get("n", 0) >= len((yz or {}).get("codes") or []), True)
+    print("        补入：%s（读 %s 音）"
+          % ("、".join(nm or c for nm, c in zip(hp_names, sorted(hp_codes))),
+             (yz or {}).get("hp_sound") or "—"))
     chk("CPO 在榜", cpo is not None, True)
     chk("CPO 涨停数 < 羊字辈", (cpo or {}).get("limit_up", 0) < (yz or {}).get("limit_up", 0), True)
     chk("CPO 涨停分不到羊字辈一半",

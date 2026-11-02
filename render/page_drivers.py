@@ -50,7 +50,8 @@ def _line_high(h, same) -> str:
 def _line_hidden(hid) -> str:
     if not hid:
         return "今日没有「站外看不见」的独立题材——具体驱动词都能在板块榜里找到对应行业。"
-    names = "、".join("<b>%s</b>（%d 只）" % (esc(d["keyword"]), d["count"]) for d in hid)
+    names = "、".join("<b>%s</b>（%d 只涨停票挂此词）" % (esc(d["keyword"]), d["count"])
+                     for d in hid)
     return ("以下具体词在 55188 板块榜里<b>查不到</b>，属游资自造题材、站外看不见：%s。" % names)
 
 
@@ -98,13 +99,18 @@ def _kw_table(rd) -> str:
         more = len(d.get("stocks") or []) - 8
         if more > 0:
             names += '<span class="sub">等 %d 只</span>' % more
+        # 「X字辈」是读音梗，本表按同花顺原词计数必然会少；给一条到概念页的口子，
+        # 那边按名称同音补全（羊→yang：泉阳泉、太平洋、扬子新材都算）。
+        if (d.get("keyword") or "").endswith("字辈"):
+            names += (' <a class="chip" href="/concept?c=%s">看概念成分（含同音补入）</a>'
+                      % esc(d["keyword"]))
         rows.append("<tr>%s%s%s%s%s</tr>" % (
             td(str(i), "sub"),
             td("<b>%s</b>" % esc(d["keyword"]), left=True),
             td("%d 只" % d["count"]),
             td(_board_tag(d["max_board"])),
             td(names + " " + " ".join(tags), left=True)))
-    return table(["#", "驱动词", "成员", "最高", "成分股 / 标记"],
+    return table(["#", "驱动词", "挂此词", "最高", "成分股 / 标记"],
                  "".join(rows), "r l r r l")
 
 
@@ -172,6 +178,13 @@ def render(data=None, meta=None, rd=None) -> str:
             "聚类打分权重降到 0.35，也不参与「暗线」判定——它们数量最多、解释力最弱，谁都能挂。<br>"
             "<b>暗线</b>＝在 55188 板块榜里查不到的具体词。它不是「更好的题材」，"
             "只是「站外看不见」，往往意味着盘子小、靠游资，波动也更大。<br>"
+            "<b>「只数」的口径别读错</b>：这里每一行的 N 只＝<b>今天有多少只涨停票用这个词解释自己</b>，"
+            "不是这个概念在全市场有多少成分股。同一个词在"
+            "<a class=\"sl\" href=\"/concept\">概念页</a>的口径是「人气榜里能抓到的成分」，"
+            "两边数字对不上是正常的。<br>"
+            "<b>「X字辈」是读音梗不是字面梗</b>：本表按同花顺原词计数，只会算写明「羊字辈」的那几只；"
+            "而读 yang 音的票远不止——泉阳泉、太平洋、扬子新材、沈阳机床、九阳股份都算。"
+            "这类概念请点上面那个「看概念成分」进概念页，那边按名称同音补全并标注「谐」。<br>"
             "本页只讲今天谁被什么解释，<b>不做热度环比</b>——只有当天一份快照、"
             "没有历史序列，任何「比昨天更热」的说法都无从验证。"
             "</div>")),
