@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import normalize
 import score as scoring
+import sector
 from fetchers import abnormal
 from .components import (esc, num, rnd, trim, signed, yi, card, table, td, grid4,
                          warn, empty, line_chart, rank_bars, temp_color)
@@ -253,6 +254,54 @@ def _score_card(x) -> str:
                 "</div>")
 
 
+def _boards_card(sc, data) -> str:
+    """行业链 + 概念板块全清单（来源：东财 F10「所属板块」）。
+
+    用户 2026-11-02：「每个股的行业标签你要从 F10 里找到」——一只票通常挂 3 个行业
+    （一/二/三级）和 6~15 个概念板块，只显示一个申万二级名（通用设备）会把
+    「机床工具」这种更贴的标签藏起来。这里全部列出来，并把用于打分的那一个标粗。
+    """
+    if not sc:
+        return ""
+    ind = sc.get("industry") or {}
+    labels = ind.get("labels") or {}
+    inds, cons = labels.get("ind") or [], labels.get("con") or []
+    if not inds and not cons:
+        return ""
+    ib = sector.blocks_of(data)
+    cb = sector.cblocks_of(data)
+    best_ind = (ind.get("best") or {}).get("ind")
+    best_con = (ind.get("best") or {}).get("con")
+
+    def chip(name, blk, best, kind):
+        v = blk.get(name) or {}
+        p = v.get("pct")
+        cls = "red" if (p or 0) >= 0 else "green"
+        mark = ('<b>%s</b>' % esc(name)) if name == best else esc(name)
+        tail = ('<span class="%s">%s%%</span>' % (cls, signed(p, 2))
+                if p is not None else '<span class="sub">无行情</span>')
+        style = ' style="border-color:#d9534f"' if name == best else ""
+        return ('<span class="tag"%s>%s %s%s</span>'
+                % (style, ("行业 " if kind == "ind" else "") + mark, tail,
+                   " · 用于打分" if name == best else ""))
+
+    chain = ('<div class="kv" style="margin-bottom:8px"><div><span>行业链</span><b>%s</b></div>'
+             % (" › ".join(esc(x) for x in inds) or "—"))
+    parts = [chain,
+             '<div class="tags">%s</div>' % "".join(chip(n, ib, best_ind, "ind") for n in inds),
+             '<div class="kv" style="margin:10px 0 8px"><div><span>概念板块</span>'
+             '<b>%d 个（最热：%s）</b></div></div>'
+             % (len(cons), esc(best_con or "—")),
+             '<div class="tags">%s</div>' % "".join(chip(n, cb, best_con, "con") for n in cons)
+             if cons else '<div class="sub">F10 未返回概念板块</div>',
+             '<div class="dv-detail" style="margin-top:10px">'
+             "行业标签取自东财 F10「所属板块」（一级 › 二级 › 三级），"
+             "打分用的是<b>最细那一级</b>（如「机床工具」19 只，比「通用设备」212 只灵敏）；"
+             "概念板块取所属板块里热度最高的一个。板块涨幅都是指数涨幅（市值加权），"
+             "与个股涨幅不是一回事。</div>"]
+    return card("行业与概念标签<span>F10 所属板块全清单</span>", "".join(parts))
+
+
 def _factors(e) -> str:
     rows_data = [
         ("L 位置分", e.get("L")), ("M 动量分", e.get("M")),
@@ -456,6 +505,7 @@ def render(code: str, e, data, meta) -> str:
         '<div class="card">%s</div>' % _kpi(e),
         # 四维评分紧随 KPI：这是本页的主评分，回答"它在全池排第几、为什么"。
         _score_card(sc),
+        _boards_card(sc, data),
         # 上榜原因紧跟在分数后面：用户点进个股页第一个想知道的不是"它多少分"，
         # 而是"它凭什么涨"。这段来自同花顺逐股异动的 reason 字段。
         _reason_card((data.get("abnormal") or {}).get(code), data.get("quote_date") or ""),

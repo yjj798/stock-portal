@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import score as scoring
+from .board_table import board_table
 from .components import esc, num, rnd, trim, signed, card, table, td, empty
 from .shell import page, footer
 
@@ -138,6 +139,9 @@ def render(data, meta, q: str = "", c: str = "") -> str:
     except Exception:
         snap = None
     rows = scoring.concept_board(stocks, snap, data.get("concept_stats"))
+    # 概念板块榜：与 /industry 的行业榜同一张表、同一套算法（东财 m:90+t:3 概念板块行情）。
+    # 用户 2026-11-02 要求两页格式一致——"行业板块里写了很多个股，概念板块里没有"就是这张表缺的。
+    crows = (sc.get("sector") or {}).get("crows") or []
 
     # 概念 → 板块热度的桥：只做展示提示，不参与概念分（两边口径不同，混用会算错）
     n_rising = sum(1 for r in rows if r["up"] >= 0.5)
@@ -191,7 +195,13 @@ def render(data, meta, q: str = "", c: str = "") -> str:
     body = "".join([
         head,
         _detail(picked, stocks) if picked else "",
-        card("概念总榜<span>%d 个概念 · 点概念看全部成分与五项拆解</span>" % len(rows), tbl),
+        board_table(crows, "概念板块榜",
+                    "东财概念板块 %d 个 · 池内命中 %d 个 · 与行业榜同一套列与算法"
+                    "（涨幅 45 + 广度 25 + 涨停 20 + 成员均涨 10）· 表内按热度分取前 60"
+                    % ((sc.get("sector") or {}).get("meta", {}).get("n_cblocks") or 0,
+                       len(crows)),
+                    kind="con", limit=60),
+        card("标签口径 · 概念总榜<span>%d 个概念 · 点概念看全部成分与五项拆解</span>" % len(rows), tbl),
         card("口径说明｜为什么不是「谁上升占比高谁第一」", EXPLAIN),
     ])
     return page("题材 · A 股全景", "/concept", body,

@@ -10,7 +10,7 @@ from __future__ import annotations
 import sector
 import score as scoring
 from fetchers import industry as ind_f
-from render import page_industry, page_rank, page_stock, page_home
+from render import page_concept, page_home, page_industry, page_rank, page_stock
 import store
 
 PASS, FAIL = 0, 0
@@ -46,11 +46,26 @@ ranked = sc["ranked"]
 chk("总分不越界（≤120）", all(r["total"] <= 120.01 for r in ranked), True)
 chk("行业分不越界（0~14）", all(0 <= r["ind"] <= 14.01 for r in ranked), True)
 chk("共振分只有 0 或 6", all(r["reso"] in (0.0, 6.0) for r in ranked), True)
-# 双轮判定复核：drive=双轮 ⇔ 行业热 且 概念分过半
+# 双轮判定复核：drive=双轮 ⇔ 行业热 且 概念热。
+# 概念热有两个口径（2026-11-02 起）：标签口径 concept≥12.5，或所属最热概念板块 itself 够热。
+def _con_hot(r):
+    i = r.get("industry") or {}
+    return bool(r["concept"] >= sector.CON_HOT or i.get("con_hot"))
+
 bad = [r["code"] for r in ranked
-       if (r["drive"] == "双轮") != (bool((r["industry"] or {}).get("hot"))
-                                    and r["concept"] >= sector.CON_HOT)]
+       if (r["drive"] == "双轮") != (bool((r["industry"] or {}).get("hot")) and _con_hot(r))]
 chk("双轮判定与两个判据严格一致", bad, [])
+# 行业标签：一票可挂多个行业（F10 行业链），最细那一级用于打分
+chk("个股带行业链标签",
+    all(isinstance(((r.get("industry") or {}).get("labels") or {}).get("ind"), list)
+        for r in ranked if (r.get("industry") or {}).get("labels")), True)
+chk("用于打分的行业 = 行业链最细一级",
+    all(((r["industry"]["labels"]["ind"] or [None])[-1] == r["industry"]["name"])
+        for r in ranked
+        if (r.get("industry") or {}).get("labels")
+        and (r["industry"]["labels"].get("ind"))), True)
+chk("个股带概念板块清单",
+    sum(1 for r in ranked if ((r.get("industry") or {}).get("labels") or {}).get("con")) >= 50, True)
 # 单边不该有共振分
 bad2 = [r["code"] for r in ranked
         if r["reso"] and r["drive"] != "双轮"]
@@ -81,6 +96,10 @@ html_i = page_industry.render(data, meta, sc=sc)
 for kw in ("行业热度榜", "双轮驱动", "行业单边", "概念单边", "口径说明", "申万行业"):
     chk("行业页含「%s」" % kw, kw in html_i, True)
 chk("行业页带行业分位条", "涨幅分位" in html_i, True)
+chk("行业页与概念页共用板表头", all(k in html_i for k in ("涨幅分位", "上涨广度", "热度分")), True)
+html_c = page_concept.render(data, meta)
+chk("概念页带概念板块榜（与行业榜同格式）",
+    all(k in html_c for k in ("概念板块榜", "涨幅分位", "上涨广度", "热度分")), True)
 # 2026-11-02 用户反馈：单边标签被读成「这只票没有另一项」，所以要写清差在哪
 chk("单边行标出与门槛的差距", "＜ 门槛" in html_i or "＜ 12.5" in html_i, True)
 chk("口径说明点明单边≠没有另一项", "单边不是" in html_i, True)

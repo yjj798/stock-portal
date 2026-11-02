@@ -36,22 +36,38 @@ NAME = "industry"
 
 BLK_URL = ("https://push2.eastmoney.com/api/qt/clist/get"
            "?pn=%d&pz=100&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281"
-           "&fltt=2&invt=2&fid=f3&fs=m:90+t:2"
+           "&fltt=2&invt=2&fid=f3&fs=%s"
            "&fields=f3,f12,f14,f62,f104,f105,f128,f140")
 
 MAX_PAGE = 8          # 约 500 个板块 / 100 = 5 页，留余量
+
+# 行业板块与概念板块是**同一套接口**，只差 fs 参数：
+#   m:90+t:2 → 行业（申万式，496 个）
+#   m:90+t:3 → 概念（题材，531 个）
+# 字段完全一致，所以打分可以用同一个函数——用户 2026-11-02 要求两页"格式一样"，
+# 底层就该是同一份读数，而不是各写一套。
+KINDS = {
+    "industry": {"fs": "m:90+t:2", "name": "industry", "min": 50},
+    "concept": {"fs": "m:90+t:3", "name": "concept_sector", "min": 100},
+}
 
 
 def _num(v):
     return v if isinstance(v, (int, float)) else None
 
 
-def fetch(save: bool = True) -> dict:
-    """返回 {行业名: 板块读数}。行业名与个股 f100 同一套命名。"""
+def fetch(save: bool = True, kind: str = "industry") -> dict:
+    """返回 {板块名: 板块读数}。行业名与个股 f100 同一套命名。
+
+    kind="industry"（默认，保持旧调用不变）或 "concept"。
+    """
+    spec = KINDS.get(kind) or KINDS["industry"]
+    name = spec["name"]
     out = {}
     total = None
     for pn in range(1, MAX_PAGE + 1):
-        obj = base.pick_json([("eastmoney", BLK_URL % pn, (False, True))], timeout=25)[0]
+        obj = base.pick_json([("eastmoney", BLK_URL % (pn, spec["fs"]), (False, True))],
+                             timeout=25)[0]
         data = (obj or {}).get("data") or {}
         if total is None:
             total = data.get("total")
@@ -61,12 +77,12 @@ def fetch(save: bool = True) -> dict:
         if not diff:
             break
         for r in diff:
-            name = str(r.get("f14") or "").strip()
+            bname = str(r.get("f14") or "").strip()      # 别叫 name：会覆盖上面的保存名
             pct = _num(r.get("f3"))
-            if not name or pct is None:
+            if not bname or pct is None:
                 continue
             up, down = _num(r.get("f104")), _num(r.get("f105"))
-            out[name] = {
+            out[bname] = {
                 "code": r.get("f12"),
                 "pct": round(float(pct), 2),
                 "net": _num(r.get("f62")),
@@ -77,11 +93,18 @@ def fetch(save: bool = True) -> dict:
             }
         if len(diff) < 100:
             break
-    if len(out) < 50:
-        raise base.FetchError("行业板块条数异常：只有 %d 个（total=%s）" % (len(out), total))
+    if len(out) < spec["min"]:
+        raise base.FetchError("%s 板块条数异常：只有 %d 个（total=%s）"
+                              % (kind, len(out), total))
     if save:
-        base.save(NAME, out, {"n": len(out), "total": total})
+        base.save(name, out, {"n": len(out), "total": total, "kind": kind})
     return out
+
+
+def load_kind(kind: str = "industry"):
+    """按类型读盘。industry → data/live/industry.json；concept → concept_sector.json"""
+    spec = KINDS.get(kind) or KINDS["industry"]
+    return base.load(spec["name"])
 
 
 def save(data: dict, meta: dict = None) -> str:

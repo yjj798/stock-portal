@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import score as scoring
 from sector import CON_HOT, HOT_BREADTH, HOT_PCT
+from .board_table import board_table
 from .components import card, empty, esc, grid4, num, signed, table, td, trim, yi
 from .shell import footer, page
 
@@ -101,6 +102,14 @@ def _why(r, gate) -> str:
     return ""
 
 
+def _chain(labels) -> str:
+    """行业链小字：机械设备 › 通用设备 › 机床工具。一级到三级都摆出来，
+    用户才知道「机床工具」是怎么来的，不是系统随手挑的一个词。"""
+    if not labels:
+        return ""
+    return " › ".join(esc(x) for x in labels)
+
+
 def _drive_table(rows, stocks, title: str, sub: str, empty_text: str, gate=None) -> str:
     if not rows:
         return card(title, empty(empty_text), sub)
@@ -108,20 +117,28 @@ def _drive_table(rows, stocks, title: str, sub: str, empty_text: str, gate=None)
     for r in rows:
         i = r.get("industry") or {}
         why = _why(r, gate)
+        chain = _chain((i.get("labels") or {}).get("ind") or [])
+        con = i.get("best", {}).get("con")
+        cpct = i.get("con_pct")
+        cnote = ("%d 个概念板块" % len((i.get("labels") or {}).get("con") or [])
+                 if (i.get("labels") or {}).get("con") else "无概念板块")
         body_rows.append("<tr>%s%s%s%s%s%s%s</tr>" % (
-            td('<a class="sl" href="/s/%s">%s</a>' % (esc(r["code"]), esc(r.get("name") or r["code"])),
-               left=True),
-            td(esc(i.get("name") or "—"), left=True),
+            td('<a class="sl" href="/s/%s">%s</a>' % (esc(r["code"]),
+                                                     esc(r.get("name") or r["code"])), left=True),
+            td("<b>%s</b>%s" % (esc(i.get("name") or "—"),
+                               '<div class="sub">%s</div>' % chain if chain else ""), left=True),
             td(_pct_cell(i.get("pct"))),
-            td(_bar_cell(i.get("pct_rank") or 0, "%.0f%%" % ((i.get("pct_rank") or 0) * 100)),
-               left=True),
+            td(('<b class="%s">%s %s%%</b><div class="sub">%s</div>'
+                % ("red" if num(cpct) >= 0 else "green", esc(con or "—"),
+                   signed(cpct, 2) if cpct is not None else "—", esc(cnote)))
+               if con else '<span class="sub">—</span>', left=True),
             td("<b>%s</b><span class=\"sub\">/25</span>" % trim(r["concept"], 1)),
             td('<b class="big">%s</b>' % trim(r["total"], 1)),
             td('<span class="%s">%s</span>%s'
                % (DRIVE_CLS.get(r["drive"], ""), esc(r["drive"]),
                   '<div class="sub">%s</div>' % esc(why) if why else "")),
         ))
-    return card(title, table(["股票", "行业", "行业涨幅", "行业中位置", "概念 /25",
+    return card(title, table(["股票", "行业（最细一级）", "行业涨幅", "最热概念板块", "概念 /25",
                               "总分 /120", "驱动"],
                              "".join(body_rows), "l l r l l r l"), sub)
 
@@ -136,8 +153,12 @@ def _note(data) -> str:
                   "页面标「无行业数据」而不是判成行业弱" % (n_code, n_ok, miss))
     return card("口径说明", (
         '<div class="dv-detail">'
-        "<b>行业分类</b>取申万行业（东财行业板块，含二级与三级共 %d 个），个股归属来自行情接口的"
-        "所属行业字段，不是按名字或概念猜的——实测池内 %s。<br>"
+        "<b>行业分类</b>取东财行业板块（含一/二/三级共 %d 个），个股归属来自 <b>F10「所属板块」</b>："
+        "一只票通常挂 3 层行业（如 机械设备 › 通用设备 › 机床工具）＋若干概念板块，"
+        "打分用的是<b>最细那一级</b>——通用设备全市场 212 只、天天贴着大盘中位，"
+        "机床工具只有 19 只，异动才看得见。实测池内 %s。<br>"
+        "<b>概念板块</b>与行业板块是同一套接口（m:90+t:3，531 个）、同一份字段、同一个打分函数，"
+        "所以 /concept 的概念板块榜与本页的行业榜列完全一致。<br>"
         "<b>行业分（0~14）</b>＝涨幅分位 7 + 上涨广度分位 4 + 主力净额分位 3。"
         "三项都用<b>全市场行业排名</b>而不是绝对涨幅：普涨日 +3%% 只是中位数，"
         "全场下跌时 +0.5%% 就已经最强，绝对数会随大盘漂。<br>"
@@ -208,7 +229,10 @@ def render(data, meta, sc=None) -> str:
         head,
         degr,
         '<div class="card">%s</div>' % kpi,
-        _industry_table(rows, stocks) if rows else card("行业热度榜", empty("今天没有行业数据")),
+        board_table(rows, "行业热度榜",
+                    "只列池内有成员的行业 · 共 %d 个 · 热度分＝涨幅 45 + 广度 25 + 涨停 20 "
+                    "+ 成员均涨 10（与 /concept 的概念板块榜同一套算法）" % len(rows)),
+
         _drive_table(double, stocks, "双轮驱动<span>行业在加速，概念也在热</span>",
                      "两类逻辑同时成立", "今天没有双轮驱动的票——行业与概念没有同时热的那一只。",
                      gate),

@@ -21,7 +21,8 @@ import normalize
 import reasons_core
 import sector
 import store
-from fetchers import (abnormal, attr as attr_f, brieffeed, hotlist_ths, industry as industry_f,
+from fetchers import (abnormal, attr as attr_f, brieffeed, f10 as f10_f,
+                      hotlist_ths, industry as industry_f,
                       lhb, renqi, spot as spot_f, tdx_rank)
 
 
@@ -117,6 +118,27 @@ def run(allow_partial: bool = False) -> dict:
             sector.save_hist(time.strftime("%Y-%m-%d"), ind_blocks)
     except Exception as e:  # noqa: BLE001
         errors["industry"] = "%s: %s" % (type(e).__name__, e)
+        traceback.print_exc()
+
+    # ---- 概念板块（东财 m:90+t:3，531 个）：与行业板块同一套字段、同一套算法。
+    #      行业页与概念页要"格式一样"，底层就得是两份同构的板块读数。
+    con_blocks, con_meta = {}, {}
+    try:
+        con_blocks = industry_f.fetch(save=True, kind="concept")
+        print("  概念板块 %d 个" % len(con_blocks))
+    except Exception as e:  # noqa: BLE001
+        errors["concept_sector"] = "%s: %s" % (type(e).__name__, e)
+        traceback.print_exc()
+
+    # ---- 个股所属板块（F10 ssbk）：一只票挂 3 个行业（一/二/三级）+ 若干概念板块。
+    #      这是"行业标签不唯一"的数据源；缺了会退回 f100 单行业，页面照常出。
+    f10 = {}
+    try:
+        f10 = f10_f.fetch(list(idx.keys()))
+        print("  F10 所属板块 %d 只（有行业链 %d 只）"
+              % (len(f10), sum(1 for v in f10.values() if v.get("industries"))))
+    except Exception as e:  # noqa: BLE001
+        errors["f10"] = "%s: %s" % (type(e).__name__, e)
         traceback.print_exc()
 
     # 上榜原因（同花顺逐股异动接口的 reason 字段）——个股页最值钱的一块，
@@ -219,6 +241,10 @@ def run(allow_partial: bool = False) -> dict:
             "by_code": {c: e["industry"] for c, e in idx.items() if e.get("industry")},
             "meta": ind_meta,
         },
+        # 概念板块：与 industry 同构（同字段、同算法），供 /concept 的概念板块榜
+        "concept_sector": {"blocks": con_blocks, "meta": con_meta},
+        # 个股所属板块（F10）：行业链 1~3 个 + 概念板块若干，行业标签不再唯一
+        "f10": f10,
         "degraded": ["%s（%s）" % (k, v) for k, v in errors.items()],
     }
     meta = {"errors": errors, "n_stocks": len(idx),
@@ -231,6 +257,8 @@ def run(allow_partial: bool = False) -> dict:
             "n_zb": len((at.get("today") or {}).get("zb") or []),
             "n_driver": len(rd.get("drivers") or []),
             "n_industry": len(ind_blocks),
+            "n_concept_block": len(con_blocks),
+            "n_f10": len(f10),
             "n_brief": len(br.get("reports") or [])}
     store.save_bundle(bundle, meta)
     return {"meta": meta, "bundle": bundle}
