@@ -1,0 +1,197 @@
+# -*- coding: utf-8 -*-
+"""刷新实时层：抓三源 → 归一 → 写 data/live/bundle.json。
+
+用法：
+    python refresh.py            # 抓三个源，全部成功才算成功
+    python refresh.py --allow-partial   # 哪个源挂了就跳过它，仍然出 bundle
+
+为什么要"全成功才算成功"：三张榜互相印证才有意义。如果默默用昨天的 tdx 补上，
+页面上看不出少了一块，但结论会错——宁可让刷新报错，让人知道今天缺一张榜。
+--allow-partial 是给计划任务凌晨自动跑用的：那时源站偶尔维护，缺一张也别把
+整站刷新卡死（页面顶部会显示"部分数据源异常"）。
+"""
+from __future__ import annotations
+
+import os
+import sys
+import traceback
+
+import normalize
+import reasons_core
+import store
+from fetchers import abnormal, attr as attr_f, brieffeed, hotlist_ths, lhb, renqi, tdx_rank
+
+
+def _snap_for_reasons(qdate8: str, bundle_stocks: dict):
+    """给驱动词聚类准备「当日涨停池」的两种来源。
+
+    首选当天快照的 ladder（带 55188 板块 plates，能把「暗线」判准）；
+    快照缺这一天时退化成 attr 的东财涨停池，板块名从 bundle 的概念成分反查——
+    口径差一点，但总比整页空着强，返回的 sec_plates 会因此偏少（暗线计数偏高）。
+    """
+    d8 = "%s-%s-%s" % (qdate8[:4], qdate8[4:6], qdate8[6:]) if len(qdate8) == 8 else qdate8
+    try:
+        got_day, snap = store.load_snapshot(d8)
+        if snap and snap.get("ladder"):
+            return snap
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
+def _fake_snap(at: dict, concept_stats: list) -> dict:
+    """用东财涨停池造一个最小可用的 snap（attach 只需要 trade_date + ladder）。"""
+    q = at.get("qdate") or ""
+    d8 = "%s-%s-%s" % (q[:4], q[4:6], q[6:]) if len(q) == 8 else q
+    by_board = {}
+    for it in (at.get("today") or {}).get("zt") or []:
+        by_board.setdefault(int(it.get("board") or 1), []).append(it)
+    ladder = []
+    for b, items in sorted(by_board.items(), reverse=True):
+        ladder.append({"board": b, "count": len(items),
+                       "stocks": [{"code": x["code"], "name": x.get("name") or "",
+                                   "plates": []} for x in items]})
+    return {"trade_date": d8, "ladder": ladder}
+
+
+def run(allow_partial: bool = False) -> dict:
+    errors = {}
+    rq = tdx = hot = None
+
+    try:
+        rq = renqi.fetch()
+    except Exception as e:  # noqa: BLE001
+        errors["renqi"] = "%s: %s" % (type(e).__name__, e)
+        traceback.print_exc()
+
+    try:
+        tdx = tdx_rank.fetch()
+    except Exception as e:  # noqa: BLE001
+        errors["tdx"] = "%s: %s" % (type(e).__name__, e)
+        traceback.print_exc()
+
+    try:
+        hot = hotlist_ths.fetch()
+    except Exception as e:  # noqa: BLE001
+        errors["hot"] = "%s: %s" % (type(e).__name__, e)
+        traceback.print_exc()
+
+    if errors and not allow_partial:
+        raise SystemExit("刷新失败，以下源没抓到：%s\n"
+                         "确认要「缺一块也刷新」就加 --allow-partial。" % errors)
+
+    idx = normalize.build(rq, tdx, hot)
+
+    # 上榜原因（同花顺逐股异动接口的 reason 字段）——个股页最值钱的一块，
+    # 每只票一次请求，并发抓；整体失败也不拦刷新，页面显示"暂无"。
+    reasons = {}
+    try:
+        reasons = abnormal.fetch_all(list(idx.keys()))
+    except Exception as e:  # noqa: BLE001
+        errors["abnormal"] = "%s: %s" % (type(e).__name__, e)
+        traceback.print_exc()
+
+    # 龙虎榜（个股上榜）：同花顺 ggph 给机构席位，东财给 30 天全量次数与净买。
+    # 这是"资金是不是真站在里面"的独立证据，缺了不影响主榜，只在页面上少两列。
+    lh = {}
+    try:
+        lh = lhb.fetch()
+    except Exception as e:  # noqa: BLE001
+        errors["lhb"] = "%s: %s" % (type(e).__name__, e)
+        traceback.print_exc()
+
+    # 概念成分只有名字没有代码，这里补上代码，题材页才能点进个股
+    n2c = normalize.name_index(idx)
+    stats = []
+    for c in ((rq or {}).get("concept_stats") or []):
+        d = dict(c)
+        d["members"] = [[r[0], r[1], n2c.get(r[1], "")] for r in (c.get("members") or [])]
+        stats.append(d)
+
+    # ---- 归因池（涨停/炸板）：P3 /attr 的唯一数据源，独立成文件不进 bundle，
+    #      因为它是全市场口径，和人气池 167 只是两个集合，混一起会把口径搅乱。
+    at = {}
+    try:
+        at = attr_f.fetch()
+        attr_f.save(at)
+    except Exception as e:  # noqa: BLE001
+        errors["attr"] = "%s: %s" % (type(e).__name__, e)
+        traceback.print_exc()
+
+    # ---- 驱动词（P3 /drivers）：优先用当日快照的板块口径，缺了就退化成东财涨停池
+    rd = {}
+    try:
+        snap = _snap_for_reasons(at.get("qdate") or "", idx) if at else None
+        if not (snap and snap.get("ladder")):
+            snap = _fake_snap(at or {}, stats)
+        if snap.get("trade_date"):
+            rd = reasons_core.attach(snap, os.path.join(store.DATA, "reasons"),
+                                     sleep=0.15, verbose=False) or {}
+    except Exception as e:  # noqa: BLE001
+        errors["drivers"] = "%s: %s" % (type(e).__name__, e)
+        traceback.print_exc()
+
+    # ---- 简报（P3 /brief）：只有「事件日历」是不可替代的，指数与基调当补充
+    br = {}
+    try:
+        br = brieffeed.fetch(4)
+        brieffeed.save(br)
+    except Exception as e:  # noqa: BLE001
+        errors["brief"] = "%s: %s" % (type(e).__name__, e)
+        traceback.print_exc()
+
+    bundle = {
+        "quote_date": (rq or {}).get("quote_date"),
+        "updated_at": (rq or {}).get("updated_at"),
+        "intraday": bool((rq or {}).get("intraday")),
+        "stocks": idx,
+        "concept_stats": stats,
+        "concept_stats_heat": (rq or {}).get("concept_stats_heat") or [],
+        "concept_traj": (rq or {}).get("concept_traj") or {},
+        "lists": (rq or {}).get("lists") or {},
+        # 综合分 TOP10 就是 leaderboard（10 条、score_final 严格递减）。
+        # 别拿 lists.composite——那只有 5 条，是"涨停且高分"的子集，不是 TOP10。
+        "leaderboard": (rq or {}).get("leaderboard") or [],
+        "tdx_top": (tdx or {}).get("top") or [],
+        "hot_hour": ((hot or {}).get("lists") or {}).get("hour") or [],
+        "hot_day": ((hot or {}).get("lists") or {}).get("day") or [],
+        "abnormal": reasons,
+        "lhb": (lh or {}).get("by_code") or {},
+        "lhb_meta": {k: v for k, v in (lh or {}).items() if k != "by_code"},
+        "degraded": ["%s（%s）" % (k, v) for k, v in errors.items()],
+    }
+    meta = {"errors": errors, "n_stocks": len(idx),
+            "n_concept": len(stats),
+            "n_tdx": len(bundle["tdx_top"]),
+            "n_hot_hour": len(bundle["hot_hour"]),
+            "n_reason": len(reasons),
+            "n_lhb": len(bundle["lhb"]),
+            "n_attr": len((at.get("today") or {}).get("zt") or []),
+            "n_zb": len((at.get("today") or {}).get("zb") or []),
+            "n_driver": len(rd.get("drivers") or []),
+            "n_brief": len(br.get("reports") or [])}
+    store.save_bundle(bundle, meta)
+    return {"meta": meta, "bundle": bundle}
+
+
+def main():
+    partial = "--allow-partial" in sys.argv
+    r = run(allow_partial=partial)
+    m = r["meta"]
+    b = r["bundle"]
+    print("bundle 已写入 %s" % store.BUNDLE)
+    print("  行情日 %s　主体 %s　盘中 %s"
+          % (b["quote_date"], b["updated_at"], "是" if b["intraday"] else "否"))
+    print("  个股 %d 只　概念 %d 个　tdx %d 只　热榜 %d 只　上榜原因 %d 条　龙虎榜 %d 只"
+          % (m["n_stocks"], m["n_concept"], m["n_tdx"], m["n_hot_hour"], m["n_reason"],
+             m["n_lhb"]))
+    print("  涨停 %d 只　炸板 %d 只　驱动词 %d 个　简报 %d 篇"
+          % (m["n_attr"], m["n_zb"], m["n_driver"], m["n_brief"]))
+    if m["errors"]:
+        print("  降级：")
+        for k, v in m["errors"].items():
+            print("    - %s: %s" % (k, v))
+
+
+if __name__ == "__main__":
+    main()
